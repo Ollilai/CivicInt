@@ -2,6 +2,8 @@
 
 import asyncio
 import hashlib
+import ipaddress
+import socket
 import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
@@ -12,6 +14,70 @@ from urllib.parse import urlparse
 import httpx
 
 from watchdog.config import get_settings
+
+
+# SECURITY: Private/internal IP ranges that should never be accessed
+_BLOCKED_IP_RANGES = [
+    ipaddress.ip_network("10.0.0.0/8"),
+    ipaddress.ip_network("172.16.0.0/12"),
+    ipaddress.ip_network("192.168.0.0/16"),
+    ipaddress.ip_network("127.0.0.0/8"),
+    ipaddress.ip_network("169.254.0.0/16"),  # Link-local
+    ipaddress.ip_network("::1/128"),  # IPv6 localhost
+    ipaddress.ip_network("fc00::/7"),  # IPv6 private
+    ipaddress.ip_network("fe80::/10"),  # IPv6 link-local
+]
+
+
+def is_safe_url(url: str, allowed_domain: Optional[str] = None) -> bool:
+    """
+    Check if a URL is safe to fetch (not targeting internal resources).
+
+    SECURITY: Prevents SSRF by blocking:
+    - Non-HTTP(S) schemes
+    - Private/internal IP addresses
+    - Localhost and link-local addresses
+
+    Args:
+        url: The URL to validate.
+        allowed_domain: If provided, only allow URLs from this domain.
+
+    Returns:
+        True if the URL is safe to fetch, False otherwise.
+    """
+    try:
+        parsed = urlparse(url)
+
+        # Only allow http and https
+        if parsed.scheme not in ("http", "https"):
+            return False
+
+        # Must have a hostname
+        if not parsed.hostname:
+            return False
+
+        # Check domain restriction if provided
+        if allowed_domain and parsed.hostname != allowed_domain:
+            # Allow subdomains of the allowed domain
+            if not parsed.hostname.endswith(f".{allowed_domain}"):
+                return False
+
+        # Resolve hostname to IP and check against blocked ranges
+        try:
+            ip_str = socket.gethostbyname(parsed.hostname)
+            ip = ipaddress.ip_address(ip_str)
+
+            for blocked_range in _BLOCKED_IP_RANGES:
+                if ip in blocked_range:
+                    return False
+        except socket.gaierror:
+            # DNS resolution failed - could be an attack vector
+            return False
+
+        return True
+
+    except Exception:
+        return False
 
 
 @dataclass
@@ -89,9 +155,13 @@ class BaseConnector(ABC):
     
     async def fetch(self, url: str, retries: int = 3) -> httpx.Response:
         """Fetch URL with rate limiting and retries."""
+        # SECURITY: Validate URL to prevent SSRF attacks
+        if not is_safe_url(url):
+            raise ValueError(f"SECURITY: Blocked unsafe URL: {url}")
+
         domain = urlparse(url).netloc
         await self.rate_limiter.acquire(domain)
-        
+
         client = await self._get_client()
         
         last_error = None

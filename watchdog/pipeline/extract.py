@@ -6,6 +6,32 @@ from watchdog.config import get_settings
 from watchdog.db.models import File, TextStatus, get_session_factory
 
 
+def safe_path_join(base: Path, untrusted_path: str) -> Path:
+    """
+    Safely join a base path with an untrusted path component.
+
+    SECURITY: Prevents path traversal attacks by ensuring the resolved path
+    is within the base directory.
+
+    Raises:
+        ValueError: If the path would escape the base directory.
+    """
+    # Resolve both paths to absolute paths
+    base_resolved = base.resolve()
+    joined_path = (base / untrusted_path).resolve()
+
+    # Check that the joined path is within the base directory
+    try:
+        joined_path.relative_to(base_resolved)
+    except ValueError:
+        raise ValueError(
+            f"SECURITY: Path traversal attempt detected. "
+            f"Path '{untrusted_path}' escapes base directory."
+        )
+
+    return joined_path
+
+
 def extract_text_from_pdf(pdf_path: Path) -> str:
     """Extract text from a PDF file using pdfplumber."""
     import pdfplumber
@@ -58,8 +84,14 @@ def run():
         print(f"Extracting text from {len(pending_files)} files...")
         
         for file in pending_files:
-            pdf_path = storage_base / file.storage_path
-            
+            # SECURITY: Use safe path join to prevent path traversal
+            try:
+                pdf_path = safe_path_join(storage_base, file.storage_path)
+            except ValueError as e:
+                print(f"  ✗ Security error: {e}")
+                file.text_status = TextStatus.FAILED
+                continue
+
             if not pdf_path.exists():
                 print(f"  ✗ File not found: {file.storage_path}")
                 file.text_status = TextStatus.FAILED

@@ -1,9 +1,15 @@
 """Application configuration using Pydantic Settings."""
 
+import os
+import secrets
 from functools import lru_cache
 from typing import Literal
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+# SECURITY: Insecure default key that must be changed in production
+_INSECURE_DEFAULT_KEY = "change-this-in-production"
 
 
 class Settings(BaseSettings):
@@ -26,7 +32,8 @@ class Settings(BaseSettings):
     openai_api_key: str = ""
 
     # Security
-    secret_key: str = "change-this-in-production"
+    secret_key: str = _INSECURE_DEFAULT_KEY
+    admin_token: str = ""  # Required for admin access
 
     # Email
     mail_server: str = ""
@@ -53,7 +60,22 @@ class Settings(BaseSettings):
     case_builder_max_tokens: int = 8000
 
 
+def validate_security_settings(settings: Settings) -> None:
+    """
+    Validate security-critical settings.
+
+    SECURITY: Raises RuntimeError if insecure defaults are used in production.
+    """
+    if not settings.debug and settings.secret_key == _INSECURE_DEFAULT_KEY:
+        raise RuntimeError(
+            "SECURITY ERROR: SECRET_KEY must be changed from default in production. "
+            "Generate a secure key with: python -c \"import secrets; print(secrets.token_urlsafe(32))\""
+        )
+
+
 @lru_cache
 def get_settings() -> Settings:
     """Get cached settings instance."""
-    return Settings()
+    settings = Settings()
+    validate_security_settings(settings)
+    return settings

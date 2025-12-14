@@ -25,7 +25,7 @@ def get_connector(source: Source):
     
     connector_class = connector_map.get(source.platform)
     if not connector_class:
-        raise ValueError(f"Unknown platform: {source.platform}")
+        return None  # Unsupported platform, will be skipped
     
     return connector_class(
         source_id=source.id,
@@ -37,6 +37,8 @@ def get_connector(source: Source):
 async def process_source(source: Source, session: Session) -> int:
     """Process a single source and return count of new documents."""
     connector = get_connector(source)
+    if connector is None:
+        return 0  # Skip unsupported platforms
     new_count = 0
     
     try:
@@ -109,10 +111,16 @@ def run():
             return
         
         total_new = 0
+        skipped = 0
+        supported_platforms = {"cloudnc", "dynasty", "tweb"}
         for source in sources:
+            if source.platform not in supported_platforms:
+                print(f"Skipping: {source.municipality} ({source.platform}) - unsupported platform")
+                skipped += 1
+                continue
             print(f"Discovering: {source.municipality} ({source.platform})")
             new_count = asyncio.run(process_source(source, session))
             print(f"  → Found {new_count} new documents")
             total_new += new_count
         
-        print(f"\nTotal new documents: {total_new}")
+        print(f"\nTotal new documents: {total_new} ({skipped} sources skipped)")

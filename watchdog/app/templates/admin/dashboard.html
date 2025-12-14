@@ -1,0 +1,109 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="admin-container">
+    <header class="admin-header">
+        <h1>Admin Dashboard</h1>
+    </header>
+
+    <div class="stats-grid">
+        <div class="stat-card">
+            <div class="stat-value">{{ sources|length }}</div>
+            <div class="stat-label">Data Sources</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value">{{ doc_count }}</div>
+            <div class="stat-label">Documents</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value">{{ case_count }}</div>
+            <div class="stat-label">Cases</div>
+        </div>
+        <div class="stat-card stat-card-budget">
+            <div class="stat-value">€{{ "%.2f"|format(llm_spend) }} / €{{ "%.0f"|format(llm_budget) }}</div>
+            <div class="stat-label">LLM Budget (This Month)</div>
+            <div class="budget-bar">
+                <div class="budget-fill" style="width: {{ (llm_spend / llm_budget * 100) if llm_budget else 0 }}%">
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <section class="admin-section">
+        <h2>📡 Data Sources</h2>
+
+        {% if sources %}
+        <table class="admin-table">
+            <thead>
+                <tr>
+                    <th>Municipality</th>
+                    <th>Platform</th>
+                    <th>Status</th>
+                    <th>Last Success</th>
+                    <th>Errors</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for source in sources %}
+                <tr class="{% if source.consecutive_failures > 0 %}row-warning{% endif %}">
+                    <td><strong>{{ source.municipality }}</strong></td>
+                    <td><code>{{ source.platform }}</code></td>
+                    <td>
+                        {% if source.enabled %}
+                        {% if source.consecutive_failures == 0 %}
+                        <span class="status-badge status-ok">✓ OK</span>
+                        {% else %}
+                        <span class="status-badge status-error">✗ {{ source.consecutive_failures }} fails</span>
+                        {% endif %}
+                        {% else %}
+                        <span class="status-badge status-disabled">Disabled</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if source.last_success_at %}
+                        {{ source.last_success_at.strftime('%d.%m.%Y %H:%M') }}
+                        {% else %}
+                        Never
+                        {% endif %}
+                    </td>
+                    <td class="error-cell">
+                        {% if source.last_error %}
+                        <span title="{{ source.last_error }}">{{ source.last_error[:50] }}...</span>
+                        {% else %}
+                        —
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <div class="empty-state">
+            <p>No sources configured. Add sources with:</p>
+            <code>python -m watchdog.cli add-source -m "Municipality" -p platform -u "https://..."</code>
+        </div>
+        {% endif %}
+    </section>
+
+    <section class="admin-section">
+        <h2>🛠️ Quick Actions</h2>
+        <div class="actions-grid">
+            <div class="action-card">
+                <h3>Run Pipeline</h3>
+                <p>Discover, fetch, and process new documents</p>
+                <code>python -m watchdog.cli run-pipeline</code>
+            </div>
+            <div class="action-card">
+                <h3>Check Health</h3>
+                <p>View connector status summary</p>
+                <code>python -m watchdog.cli health</code>
+            </div>
+            <div class="action-card">
+                <h3>Add Source</h3>
+                <p>Add a new municipality to monitor</p>
+                <code>python -m watchdog.cli add-source --help</code>
+            </div>
+        </div>
+    </section>
+</div>
+{% endblock %}

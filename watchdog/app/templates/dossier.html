@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="dossier-container">
+    <a href="/feed" class="back-link">← Back to Cases</a>
+
+    <header class="dossier-header">
+        <div class="dossier-badges">
+            <span class="case-category category-{{ case.primary_category }}">
+                {% if case.primary_category == 'zoning' %}🏗️{% elif case.primary_category == 'permits' %}📋{% elif
+                case.primary_category == 'water' %}💧{% elif case.primary_category == 'industry' %}🏭{% else %}📄{%
+                endif %}
+                {{ case.primary_category|title }}
+            </span>
+            <span class="case-status status-{{ case.status }}">{{ case.status|title }}</span>
+            <span class="case-confidence confidence-{{ case.confidence }}">
+                {% if case.confidence == 'high' %}🟢{% elif case.confidence == 'medium' %}🟡{% else %}🔴{% endif %}
+                {{ case.confidence|title }} Confidence
+            </span>
+        </div>
+
+        <h1 class="dossier-headline">{{ case.headline }}</h1>
+
+        {% if case.confidence_reason %}
+        <p class="confidence-reason">{{ case.confidence_reason }}</p>
+        {% endif %}
+    </header>
+
+    <section class="dossier-section">
+        <h2>📋 Executive Debrief</h2>
+        <div class="debrief-content">
+            {{ case.summary_md | safe }}
+        </div>
+    </section>
+
+    {% if case.events %}
+    <section class="dossier-section">
+        <h2>📅 Timeline</h2>
+        <div class="timeline">
+            {% for event in case.events %}
+            <div class="timeline-item">
+                <div class="timeline-date">
+                    {% if event.event_time %}
+                    {{ event.event_time.strftime('%d.%m.%Y') }}
+                    {% else %}
+                    —
+                    {% endif %}
+                </div>
+                <div class="timeline-content">
+                    <span class="timeline-type">{{ event.event_type }}</span>
+                    {% if event.payload_json %}
+                    <p>{{ event.payload_json }}</p>
+                    {% endif %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </section>
+    {% endif %}
+
+    {% if case.evidence %}
+    <section class="dossier-section">
+        <h2>🔍 Evidence Pack</h2>
+        <div class="evidence-list">
+            {% for ev in case.evidence %}
+            <div class="evidence-item">
+                <div class="evidence-meta">
+                    {% if ev.page %}Page {{ ev.page }}{% endif %}
+                    <a href="{{ ev.source_url }}" target="_blank" class="evidence-link">View Source ↗</a>
+                </div>
+                <blockquote class="evidence-snippet">
+                    {{ ev.snippet }}
+                </blockquote>
+            </div>
+            {% endfor %}
+        </div>
+    </section>
+    {% endif %}
+
+    <section class="dossier-section">
+        <h2>📎 Original Sources</h2>
+        <div class="sources-list">
+            {% for ev in case.evidence %}
+            {% if ev.document %}
+            <a href="{{ ev.document.source_url }}" target="_blank" class="source-link">
+                📄 {{ ev.document.title }}
+            </a>
+            {% endif %}
+            {% endfor %}
+        </div>
+    </section>
+
+    <section class="dossier-section">
+        <h2>📝 Notes</h2>
+        <form class="notes-form">
+            <textarea id="note-input" placeholder="Add a note about this case..." class="note-textarea"></textarea>
+            <button type="submit" class="btn btn-primary">Save Note</button>
+        </form>
+    </section>
+</div>
+{% endblock %}

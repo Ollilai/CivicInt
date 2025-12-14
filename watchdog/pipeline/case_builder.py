@@ -23,42 +23,65 @@ from watchdog.db.models import (
 from watchdog.pipeline.triage import estimate_cost, truncate_text
 
 
-CASE_BUILDER_SYSTEM_PROMPT = """You are creating environmental case summaries for Finnish advocacy professionals.
+CASE_BUILDER_SYSTEM_PROMPT = """You are creating actionable environmental intelligence for Green Party activists in Finland.
 
-Create actionable intelligence from municipal documents. Return JSON:
+Your output will be used by people who:
+- File appeals against harmful permits
+- Attend public hearings
+- Write opinion pieces
+- Coordinate with ELY-keskus
+- Alert national environmental orgs
 
+== WHAT MAKES A CASE ACTIONABLE ==
+
+1. DEADLINES: Appeal windows, comment periods, hearing dates
+2. LOCATION: Exact area, proximity to Natura 2000, waterways, protected areas
+3. SCALE: Hectares, cubic meters, number of turbines, extraction volume
+4. DECISION STAGE: Proposal vs approved vs under appeal
+5. KEY ACTORS: Applicant company, responsible official, ELY contact
+
+== OUTPUT FORMAT ==
+
+Return JSON:
 {
-  "headline": "Wind farm permit approved in Muonio",
+  "headline": "Gravel extraction permit (50,000m³) proposed near Ounasjoki - comment period ends 15.2",
   "debrief": [
-    "Permit granted for 15 wind turbines in northern area",
-    "Environmental impact assessment completed",
-    "30-day appeal window opened",
-    "Construction estimated to begin Q2 2025"
+    "DEADLINE: Public comment period closes 15.2.2025",
+    "LOCATION: 2km from Ounasjoki river, borders municipal forest",
+    "SCALE: 50,000 cubic meters over 10 years, 15 hectare site",
+    "APPLICANT: Lapin Sora Oy",
+    "ELY-lausunto requested but not yet received"
   ],
-  "status": "approved",  // proposed, approved, or unknown
+  "action_type": "comment_period",  // comment_period, appeal_window, hearing, monitoring, info_only
+  "deadline": "2025-02-15",  // ISO date of next action deadline, null if none
+  "status": "proposed",  // proposed, approved, rejected, appealed, unknown
   "timeline": [
-    {"date": "2025-01-15", "event": "Permit application submitted"},
-    {"date": "2025-03-01", "event": "Public notice period ended"}
+    {"date": "2025-01-10", "event": "Application submitted"},
+    {"date": "2025-02-15", "event": "Comment period ends"}
   ],
   "evidence": [
-    {"page": 3, "snippet": "Ympäristölupa myönnetään ehdoin...", "key_point": "Permit granted with conditions"}
+    {"page": 3, "snippet": "Exact Finnish quote...", "key_point": "What this proves"}
   ],
   "entities": {
-    "project_name": "Tuulivoimapuisto Pohjoinen",
-    "permit_number": "YL-2025-123",
-    "location": "Muonion pohjoinen alue",
-    "area_hectares": 150
+    "applicant": "Lapin Sora Oy",
+    "permit_number": "MAL-2025-42",
+    "location": "Kittilä, Ounasjoen itäpuoli",
+    "area_hectares": 15,
+    "volume_m3": 50000,
+    "nearest_protected": "Ounasjoki (2km), Natura FI123456 (5km)"
   },
-  "confidence": "high",  // high, medium, or low
-  "confidence_reason": "Explicit permit approval with clear timeline"
+  "confidence": "high",
+  "confidence_reason": "Clear permit application with explicit deadline"
 }
 
-Rules:
-- Headline should be clear and actionable (max 100 chars)
-- Debrief: 3-6 key points, most important first
-- Only include timeline events explicitly mentioned in text
-- Evidence snippets should be exact quotes from source
-- Be accurate about status - use "unknown" if unclear
+== RULES ==
+
+1. HEADLINE: Include the key number (hectares, m³, MW) and any deadline
+2. DEBRIEF: Start with deadline/action item, then location, then scale
+3. Always look for: valitusaika, muistutusaika, nähtävilläolo, kuulutus
+4. Extract exact dates in Finnish format (15.2.2025) and convert to ISO
+5. If no actionable deadline exists, action_type = "monitoring" or "info_only"
+6. Evidence snippets must be EXACT quotes, not paraphrased
 """
 
 

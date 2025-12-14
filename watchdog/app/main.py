@@ -1,9 +1,10 @@
 """FastAPI application for Watchdog MVP."""
 
+import secrets
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, Request, Depends
+from fastapi import FastAPI, Request, Depends, HTTPException, Query
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -60,6 +61,35 @@ def get_db():
         db.close()
 
 
+# Admin authentication dependency
+def verify_admin_token(token: str = Query(None, alias="token")) -> bool:
+    """
+    Verify admin token for protected routes.
+
+    SECURITY: Requires ADMIN_TOKEN to be set in environment.
+    Uses constant-time comparison to prevent timing attacks.
+    """
+    settings = get_settings()
+
+    if not settings.admin_token:
+        raise HTTPException(
+            status_code=503,
+            detail="Admin access not configured. Set ADMIN_TOKEN in environment."
+        )
+
+    if not token:
+        raise HTTPException(
+            status_code=401,
+            detail="Admin token required. Add ?token=YOUR_TOKEN to URL."
+        )
+
+    # Constant-time comparison to prevent timing attacks
+    if not secrets.compare_digest(token, settings.admin_token):
+        raise HTTPException(status_code=403, detail="Invalid admin token.")
+
+    return True
+
+
 # ============================================================================
 # ROUTES
 # ============================================================================
@@ -109,8 +139,12 @@ async def dossier(request: Request, case_id: int, db: Session = Depends(get_db))
 
 
 @app.get("/admin", response_class=HTMLResponse)
-async def admin_dashboard(request: Request, db: Session = Depends(get_db)):
-    """Admin dashboard."""
+async def admin_dashboard(
+    request: Request,
+    db: Session = Depends(get_db),
+    _auth: bool = Depends(verify_admin_token),
+):
+    """Admin dashboard. Requires admin token for access."""
     from watchdog.db.models import Source, Document, Case, LLMUsage
     from datetime import datetime
     

@@ -50,7 +50,8 @@
             <h2 class="case-headline">{{ case.headline }}</h2>
 
             <div class="case-summary">
-                {{ case.summary_md | safe }}
+                {# SECURITY: Do not use |safe on LLM-generated content - XSS risk #}
+                {{ case.summary_md | e }}
             </div>
 
             <div class="case-meta">

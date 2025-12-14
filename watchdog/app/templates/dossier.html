@@ -29,7 +29,8 @@
     <section class="dossier-section">
         <h2>📋 Executive Debrief</h2>
         <div class="debrief-content">
-            {{ case.summary_md | safe }}
+            {# SECURITY: Do not use |safe on LLM-generated content - XSS risk #}
+            {{ case.summary_md | e }}
         </div>
     </section>
 

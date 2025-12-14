@@ -36,6 +36,8 @@ def cmd_health(args):
 
 def cmd_add_source(args):
     """Add a new source."""
+    import json
+
     Session = get_session_factory()
     with Session() as session:
         # Check if source already exists
@@ -43,16 +45,36 @@ def cmd_add_source(args):
             municipality=args.municipality,
             platform=args.platform
         ).first()
-        
+
         if existing:
-            print(f"Source for {args.municipality} ({args.platform}) already exists.")
-            return
-        
+            if args.update:
+                # Update existing source
+                existing.base_url = args.base_url
+                existing.enabled = not args.disabled
+                if args.config:
+                    existing.config_json = json.loads(args.config)
+                session.commit()
+                print(f"✓ Updated source: {args.municipality} ({args.platform})")
+                return
+            else:
+                print(f"Source for {args.municipality} ({args.platform}) already exists. Use --update to modify.")
+                return
+
+        # Parse config JSON if provided
+        config_json = None
+        if args.config:
+            try:
+                config_json = json.loads(args.config)
+            except json.JSONDecodeError as e:
+                print(f"Error parsing config JSON: {e}")
+                return
+
         source = Source(
             municipality=args.municipality,
             platform=args.platform,
             base_url=args.base_url,
-            enabled=True,
+            enabled=not args.disabled,
+            config_json=config_json,
         )
         session.add(source)
         session.commit()
@@ -90,10 +112,16 @@ def cmd_run_pipeline(args):
     print("✓ Pipeline complete.")
 
 
+def cmd_seed_lapland(args):
+    """Seed all Lapland data sources."""
+    from watchdog.seed_lapland_sources import main as seed_main
+    seed_main()
+
+
 def cmd_stats(args):
     """Show database statistics."""
     from watchdog.db.models import Document, File, Case, User, LLMUsage
-    
+
     Session = get_session_factory()
     with Session() as session:
         sources = session.query(Source).count()
@@ -145,8 +173,13 @@ def main():
     # add-source
     parser_add = subparsers.add_parser("add-source", help="Add a new source")
     parser_add.add_argument("--municipality", "-m", required=True, help="Municipality name")
-    parser_add.add_argument("--platform", "-p", required=True, choices=["cloudnc", "dynasty", "tweb", "pdf"])
+    parser_add.add_argument("--platform", "-p", required=True,
+                           choices=["cloudnc", "dynasty", "tweb", "municipal_website"],
+                           help="Platform type")
     parser_add.add_argument("--base-url", "-u", required=True, help="Base URL for the source")
+    parser_add.add_argument("--config", "-c", help="JSON config for paths and options")
+    parser_add.add_argument("--update", action="store_true", help="Update existing source")
+    parser_add.add_argument("--disabled", action="store_true", help="Add source as disabled")
     parser_add.set_defaults(func=cmd_add_source)
     
     # run-pipeline
@@ -157,7 +190,11 @@ def main():
     # stats
     parser_stats = subparsers.add_parser("stats", help="Show database statistics")
     parser_stats.set_defaults(func=cmd_stats)
-    
+
+    # seed-lapland
+    parser_seed = subparsers.add_parser("seed-lapland", help="Seed all Lapland data sources")
+    parser_seed.set_defaults(func=cmd_seed_lapland)
+
     args = parser.parse_args()
     
     if args.command is None:

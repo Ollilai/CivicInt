@@ -23,44 +23,46 @@ from watchdog.db.models import (
 from watchdog.pipeline.triage import estimate_cost, truncate_text
 
 
-CASE_BUILDER_SYSTEM_PROMPT = """You are creating actionable environmental intelligence for Green Party activists in Finland.
+CASE_BUILDER_SYSTEM_PROMPT = """Olet ympäristöaktivistien tiedustelutyökalu. Luot toiminnallisia raportteja Suomen Vihreille ja muille ympäristöjärjestöille.
 
-Your output will be used by people who:
-- File appeals against harmful permits
-- Attend public hearings
-- Write opinion pieces
-- Coordinate with ELY-keskus
-- Alert national environmental orgs
+KAIKKI TULOSTEESI TULEE OLLA SUOMEKSI.
 
-== WHAT MAKES A CASE ACTIONABLE ==
+Käyttäjäsi:
+- Tekevät valituksia haitallisista luvista
+- Osallistuvat kuulemisiin
+- Kirjoittavat mielipidekirjoituksia
+- Koordinoivat ELY-keskuksen kanssa
+- Informoivat valtakunnallisia ympäristöjärjestöjä
 
-1. DEADLINES: Appeal windows, comment periods, hearing dates
-2. LOCATION: Exact area, proximity to Natura 2000, waterways, protected areas
-3. SCALE: Hectares, cubic meters, number of turbines, extraction volume
-4. DECISION STAGE: Proposal vs approved vs under appeal
-5. KEY ACTORS: Applicant company, responsible official, ELY contact
+== MIKÄ TEKEE TAPAUKSESTA TOIMINNALLISEN ==
 
-== OUTPUT FORMAT ==
+1. MÄÄRÄAJAT: Valitusajat, muistutusajat, kuulemispäivät
+2. SIJAINTI: Tarkka alue, etäisyys Natura 2000 -alueisiin, vesistöihin, suojelualueisiin
+3. LAAJUUS: Hehtaarit, kuutiometrit, turbiinien määrä, ottomäärät
+4. PÄÄTÖSVAIHE: Vireillä vs hyväksytty vs valitettu
+5. TOIMIJAT: Hakija, vastuuvirkamies, ELY-yhteyshenkilö
 
-Return JSON:
+== TULOSTEEN MUOTO ==
+
+Palauta JSON:
 {
-  "headline": "Gravel extraction permit (50,000m³) proposed near Ounasjoki - comment period ends 15.2",
+  "headline": "Maa-aineslupa (50 000 m³) vireillä Ounasjoen läheisyydessä – muistutusaika päättyy 15.2.",
   "debrief": [
-    "DEADLINE: Public comment period closes 15.2.2025",
-    "LOCATION: 2km from Ounasjoki river, borders municipal forest",
-    "SCALE: 50,000 cubic meters over 10 years, 15 hectare site",
-    "APPLICANT: Lapin Sora Oy",
-    "ELY-lausunto requested but not yet received"
+    "MÄÄRÄAIKA: Muistutusaika päättyy 15.2.2025",
+    "SIJAINTI: 2 km Ounasjoelta, rajautuu kunnan metsään",
+    "LAAJUUS: 50 000 m³ kymmenessä vuodessa, 15 hehtaarin alue",
+    "HAKIJA: Lapin Sora Oy",
+    "ELY-lausuntoa pyydetty, ei vielä saapunut"
   ],
-  "action_type": "comment_period",  // comment_period, appeal_window, hearing, monitoring, info_only
-  "deadline": "2025-02-15",  // ISO date of next action deadline, null if none
-  "status": "proposed",  // proposed, approved, rejected, appealed, unknown
+  "action_type": "comment_period",
+  "deadline": "2025-02-15",
+  "status": "proposed",
   "timeline": [
-    {"date": "2025-01-10", "event": "Application submitted"},
-    {"date": "2025-02-15", "event": "Comment period ends"}
+    {"date": "2025-01-10", "event": "Hakemus jätetty"},
+    {"date": "2025-02-15", "event": "Muistutusaika päättyy"}
   ],
   "evidence": [
-    {"page": 3, "snippet": "Exact Finnish quote...", "key_point": "What this proves"}
+    {"page": 3, "snippet": "Tarkka suora lainaus asiakirjasta...", "key_point": "Mitä tämä todistaa"}
   ],
   "entities": {
     "applicant": "Lapin Sora Oy",
@@ -68,21 +70,24 @@ Return JSON:
     "location": "Kittilä, Ounasjoen itäpuoli",
     "area_hectares": 15,
     "volume_m3": 50000,
-    "nearest_protected": "Ounasjoki (2km), Natura FI123456 (5km)"
+    "nearest_protected": "Ounasjoki (2 km), Natura FI123456 (5 km)"
   },
   "confidence": "high",
-  "confidence_reason": "Clear permit application with explicit deadline"
+  "confidence_reason": "Selkeä lupahakemus, jossa on yksiselitteinen määräaika"
 }
 
-== RULES ==
+== SÄÄNNÖT ==
 
-1. HEADLINE: Include the key number (hectares, m³, MW) and any deadline
-2. DEBRIEF: Start with deadline/action item, then location, then scale
-3. Always look for: valitusaika, muistutusaika, nähtävilläolo, kuulutus
-4. Extract exact dates in Finnish format (15.2.2025) and convert to ISO
-5. If no actionable deadline exists, action_type = "monitoring" or "info_only"
-6. Evidence snippets must be EXACT quotes, not paraphrased
+1. OTSIKKO: Sisällytä keskeiset luvut (hehtaarit, m³, MW) ja mahdollinen määräaika
+2. YHTEENVETO: Aloita määräajasta/toimenpiteestä, sitten sijainti, sitten laajuus
+3. Etsi aina: valitusaika, muistutusaika, nähtävilläolo, kuulutus
+4. Käytä suomalaista päivämäärämuotoa (15.2.2025), mutta deadline-kentässä ISO-muoto
+5. Jos ei toiminnallista määräaikaa, action_type = "monitoring" tai "info_only"
+6. Todisteiden lainausten on oltava TARKKOJA suoria lainauksia, ei parafraaseja
+7. KIRJOITA KAIKKI headline, debrief ja confidence_reason SUOMEKSI
 """
+
+
 
 
 def find_matching_case(doc: Document, entities: dict, session) -> Optional[Case]:
@@ -239,10 +244,10 @@ def run():
     SessionLocal = get_session_factory()
     
     with SessionLocal() as session:
-        # Get processed documents that don't have evidence yet
-        # (Simple heuristic - could track more explicitly)
+        # Only process documents that passed triage (score >= 0.6)
         processed_docs = session.query(Document).filter(
             Document.status == DocumentStatus.PROCESSED,
+            Document.triage_score >= 0.6,  # Only high-relevance docs
         ).all()
         
         # Filter to those with text and not yet linked to cases
@@ -258,8 +263,9 @@ def run():
             if text_files:
                 combined_text = "\n\n---\n\n".join(f.text_content for f in text_files if f.text_content)
                 if combined_text:
-                    # Default categories for now (should come from triage)
-                    candidates.append((doc, combined_text, ["unknown"]))
+                    # Get categories from triage (stored as JSON)
+                    categories = json.loads(doc.triage_categories) if doc.triage_categories else ["unknown"]
+                    candidates.append((doc, combined_text, categories))
         
         if not candidates:
             print("No documents ready for case building.")

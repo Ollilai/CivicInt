@@ -1,5 +1,5 @@
 /**
- * Watchdog - Environmental Case Monitor
+ * Vahtikoira - Ympäristöpäätösten seuranta
  * Client-side interactivity
  */
 
@@ -13,18 +13,18 @@ document.addEventListener('DOMContentLoaded', () => {
  * Filter functionality for case cards
  */
 function initFilters() {
+    const actionableFilter = document.getElementById('filter-actionable');
+    const municipalityFilter = document.getElementById('filter-municipality');
     const categoryFilter = document.getElementById('filter-category');
-    const confidenceFilter = document.getElementById('filter-confidence');
-    const statusFilter = document.getElementById('filter-status');
     const searchInput = document.getElementById('search');
     const casesGrid = document.getElementById('cases-grid');
 
     if (!casesGrid) return;
 
     function filterCases() {
+        const onlyActionable = actionableFilter?.checked ?? true;
+        const municipality = municipalityFilter?.value || '';
         const category = categoryFilter?.value || '';
-        const confidence = confidenceFilter?.value || '';
-        const status = statusFilter?.value || '';
         const search = searchInput?.value.toLowerCase().trim() || '';
 
         const cards = casesGrid.querySelectorAll('.case-card');
@@ -32,34 +32,24 @@ function initFilters() {
 
         cards.forEach(card => {
             const cardCategory = card.dataset.category || '';
-            const cardConfidence = card.dataset.confidence || '';
             const cardStatus = card.dataset.status || '';
+            const cardMunicipality = card.dataset.municipality || '';
             const cardText = card.textContent.toLowerCase();
 
             let visible = true;
 
+            // Actionable filter - show only cases with status 'proposed' (open for input)
+            if (onlyActionable && cardStatus !== 'proposed') {
+                visible = false;
+            }
+
+            // Municipality filter
+            if (municipality && !cardMunicipality.includes(municipality)) {
+                visible = false;
+            }
+
             // Category filter
             if (category && cardCategory !== category) {
-                // Also match legacy categories
-                const legacyMatch = (category === 'extraction' && cardCategory === 'permits') ||
-                                   (category === 'energy' && cardCategory === 'industry');
-                if (!legacyMatch) {
-                    visible = false;
-                }
-            }
-
-            // Confidence filter
-            if (confidence) {
-                if (confidence === 'high' && cardConfidence !== 'high') {
-                    visible = false;
-                }
-                if (confidence === 'medium' && cardConfidence === 'low') {
-                    visible = false;
-                }
-            }
-
-            // Status filter
-            if (status && cardStatus !== status) {
                 visible = false;
             }
 
@@ -76,18 +66,23 @@ function initFilters() {
         const subtitle = document.querySelector('.feed-subtitle');
         if (subtitle) {
             const total = cards.length;
-            if (category || confidence || status || search) {
-                subtitle.textContent = `Showing ${visibleCount} of ${total} cases`;
+            if (visibleCount === 0 && municipality) {
+                subtitle.textContent = `Ei tapauksia kunnassa ${municipality}!`;
+            } else if (visibleCount === 0) {
+                subtitle.textContent = 'Ei hakuehtoja vastaavia tapauksia';
+            } else if (municipality || category || search || onlyActionable) {
+                const filterNote = onlyActionable ? ' avointa' : '';
+                subtitle.textContent = `Näytetään ${visibleCount}${filterNote} tapausta`;
             } else {
-                subtitle.textContent = `Monitoring ${total} active cases across Lapland`;
+                subtitle.textContent = `Seurannassa ${total} tapausta Lapin kunnista`;
             }
         }
     }
 
     // Attach listeners
+    actionableFilter?.addEventListener('change', filterCases);
+    municipalityFilter?.addEventListener('change', filterCases);
     categoryFilter?.addEventListener('change', filterCases);
-    confidenceFilter?.addEventListener('change', filterCases);
-    statusFilter?.addEventListener('change', filterCases);
 
     // Debounce search input
     let searchTimeout;
@@ -95,10 +90,13 @@ function initFilters() {
         clearTimeout(searchTimeout);
         searchTimeout = setTimeout(filterCases, 200);
     });
+
+    // Run initial filter
+    filterCases();
 }
 
 /**
- * Card action buttons (star, dismiss)
+ * Card action buttons (star)
  */
 function initCardActions() {
     // Star/save buttons
@@ -109,7 +107,7 @@ function initCardActions() {
 
             const isActive = btn.classList.toggle('active');
             btn.textContent = isActive ? '★' : '☆';
-            btn.title = isActive ? 'Remove from watchlist' : 'Save to watchlist';
+            btn.title = isActive ? 'Poista seurannasta' : 'Tallenna seurantaan';
 
             // Visual feedback
             btn.style.transform = 'scale(1.2)';
@@ -118,45 +116,6 @@ function initCardActions() {
             }, 150);
 
             // TODO: API call to save action
-            // const caseId = btn.closest('.case-card').dataset.caseId;
-            // saveCaseAction(caseId, 'star', isActive);
-        });
-    });
-
-    // Dismiss buttons
-    document.querySelectorAll('.btn-dismiss').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-
-            const card = btn.closest('.case-card');
-
-            // Smooth fade out
-            card.style.transition = 'opacity 0.3s ease, transform 0.3s ease';
-            card.style.opacity = '0.3';
-            card.style.transform = 'scale(0.98)';
-
-            // Show undo option (simple version)
-            btn.textContent = '↩';
-            btn.title = 'Undo dismiss';
-
-            const handleUndo = (e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                card.style.opacity = '';
-                card.style.transform = '';
-                btn.textContent = '×';
-                btn.title = 'Dismiss';
-                btn.removeEventListener('click', handleUndo);
-                btn.addEventListener('click', arguments.callee);
-            };
-
-            btn.removeEventListener('click', arguments.callee);
-            btn.addEventListener('click', handleUndo);
-
-            // TODO: API call to dismiss
-            // const caseId = card.dataset.caseId;
-            // saveCaseAction(caseId, 'dismiss', true);
         });
     });
 }
@@ -180,12 +139,12 @@ function initNotesForm() {
 
         // Show saving state
         const originalText = submitBtn.textContent;
-        submitBtn.textContent = 'Saving...';
+        submitBtn.textContent = 'Tallennetaan...';
         submitBtn.disabled = true;
 
         // TODO: Replace with actual API call
         setTimeout(() => {
-            submitBtn.textContent = 'Saved!';
+            submitBtn.textContent = 'Tallennettu!';
 
             setTimeout(() => {
                 submitBtn.textContent = originalText;
@@ -197,20 +156,9 @@ function initNotesForm() {
 
     // Auto-resize textarea
     const noteTextarea = document.getElementById('note-input');
-    noteTextarea?.addEventListener('input', function() {
+    noteTextarea?.addEventListener('input', function () {
         this.style.height = 'auto';
         this.style.height = Math.min(this.scrollHeight, 300) + 'px';
-    });
-}
-
-/**
- * Smooth scroll to element
- */
-function scrollToElement(element, offset = 100) {
-    const top = element.getBoundingClientRect().top + window.pageYOffset - offset;
-    window.scrollTo({
-        top: top,
-        behavior: 'smooth'
     });
 }
 

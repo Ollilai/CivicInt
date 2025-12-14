@@ -178,9 +178,13 @@ def run():
                 is_dominated = result.get("dominated", False)
                 score = result.get("relevance_score", 0)
                 categories = result.get("categories", [])
+                reason = result.get("signal_reason", "")
 
-                # Store triage result in document metadata (could add a column for this)
+                # Store triage results on document
                 doc.status = DocumentStatus.PROCESSED
+                doc.triage_score = score
+                doc.triage_categories = json.dumps(categories)
+                doc.triage_reason = reason
 
                 # Higher threshold: must be dominated by env content AND score >= 0.6
                 if is_dominated and score >= 0.6:
@@ -189,11 +193,11 @@ def run():
                         "text": text,
                         "categories": categories,
                         "score": score,
-                        "reason": result.get("signal_reason", ""),
+                        "reason": reason,
                     })
                     print(f"  ✓ SIGNAL: {doc.title[:50]}... ({score:.2f})")
                 elif score >= 0.4:
-                    print(f"  ~ Maybe: {doc.title[:50]}... ({score:.2f}) - {result.get('signal_reason', '')[:60]}")
+                    print(f"  ~ Maybe: {doc.title[:50]}... ({score:.2f}) - {reason[:60]}")
                 else:
                     print(f"  - Noise: {doc.title[:50]}... ({score:.2f})")
                 

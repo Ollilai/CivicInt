@@ -2,16 +2,25 @@
 
 {% block content %}
 <div class="dossier-container">
-    <a href="/feed" class="back-link">← Back to all cases</a>
+    <a href="/feed" class="back-link">← Takaisin tapauksiin</a>
 
     <header class="dossier-header">
         <div class="dossier-badges">
             <span class="case-category category-{{ case.primary_category }}">
-                {{ case.primary_category|replace('_', ' ')|title }}
+                {% if case.primary_category == 'extraction' %}Maa-ainekset
+                {% elif case.primary_category == 'zoning' %}Kaavoitus
+                {% elif case.primary_category == 'energy' %}Energia
+                {% elif case.primary_category == 'forestry' %}Metsätalous
+                {% elif case.primary_category == 'water' %}Vesistöt
+                {% else %}{{ case.primary_category|replace('_', ' ')|title }}{% endif %}
             </span>
-            <span class="case-status status-{{ case.status }}">{{ case.status|title }}</span>
+            <span class="case-status status-{{ case.status }}">
+                {% if case.status == 'proposed' %}Vireillä{% elif case.status == 'approved' %}Hyväksytty{% elif
+                case.status == 'appealed' %}Valitettu{% else %}{{ case.status|title }}{% endif %}
+            </span>
             <span class="case-confidence">
-                {{ case.confidence|title }} confidence
+                {% if case.confidence == 'high' %}Korkea{% elif case.confidence == 'medium' %}Keskitaso{% else
+                %}Matala{% endif %} varmuus
             </span>
         </div>
 
@@ -30,7 +39,7 @@
     </header>
 
     <section class="dossier-section">
-        <h2>Key Information</h2>
+        <h2>Keskeiset tiedot</h2>
         <div class="debrief-content">
             {# SECURITY: Do not use |safe on LLM-generated content - XSS risk #}
             {{ case.summary_md | e }}
@@ -39,7 +48,7 @@
 
     {% if case.events %}
     <section class="dossier-section">
-        <h2>Timeline</h2>
+        <h2>Aikajana</h2>
         <div class="timeline">
             {% for event in case.events %}
             <div class="timeline-item">
@@ -47,14 +56,15 @@
                     {% if event.event_time %}
                     {{ event.event_time.strftime('%d.%m.%Y') }}
                     {% else %}
-                    Date pending
+                    Päivämäärä tulossa
                     {% endif %}
                 </div>
                 <div class="timeline-content">
                     <span class="timeline-type">{{ event.event_type|replace('_', ' ')|title }}</span>
                     {% if event.payload_json %}
                     <p style="margin: 0.25rem 0 0; color: var(--color-text-secondary); font-size: 0.875rem;">
-                        {{ event.payload_json|replace('{', '')|replace('}', '')|replace('"description":', '')|replace('"', '') }}
+                        {{ event.payload_json|replace('{', '')|replace('}', '')|replace('"description":',
+                        '')|replace('"', '') }}
                     </p>
                     {% endif %}
                 </div>
@@ -66,14 +76,14 @@
 
     {% if case.evidence %}
     <section class="dossier-section">
-        <h2>Evidence</h2>
+        <h2>Todisteet</h2>
         <div class="evidence-list">
             {% for ev in case.evidence %}
             <div class="evidence-item">
                 <div class="evidence-meta">
-                    {% if ev.page %}<span>Page {{ ev.page }}</span>{% endif %}
+                    {% if ev.page %}<span>Sivu {{ ev.page }}</span>{% endif %}
                     {% if ev.source_url %}
-                    <a href="{{ ev.source_url }}" target="_blank" rel="noopener" class="evidence-link">View source document →</a>
+                    <a href="{{ ev.source_url }}" target="_blank" rel="noopener" class="evidence-link">Avaa lähde →</a>
                     {% endif %}
                 </div>
                 {% if ev.snippet %}
@@ -89,7 +99,7 @@
 
     {% if case.evidence %}
     <section class="dossier-section">
-        <h2>Source Documents</h2>
+        <h2>Lähdeasiakirjat</h2>
         <div class="sources-list">
             {% set seen_docs = [] %}
             {% for ev in case.evidence %}
@@ -106,15 +116,17 @@
     {% endif %}
 
     <section class="dossier-section">
-        <h2>Your Notes</h2>
+        <h2>Omat muistiinpanot</h2>
         <form class="notes-form">
-            <textarea id="note-input" placeholder="Add your notes, observations, or action items for this case..." class="note-textarea"></textarea>
-            <button type="submit" class="btn btn-primary">Save Note</button>
+            <textarea id="note-input"
+                placeholder="Lisää muistiinpanoja, havaintoja tai toimenpidelistaa tähän tapaukseen..."
+                class="note-textarea"></textarea>
+            <button type="submit" class="btn btn-primary">Tallenna</button>
         </form>
     </section>
 
     <div style="text-align: center; padding: 1rem 0; color: var(--color-text-muted); font-size: 0.8125rem;">
-        Last updated: {{ case.updated_at.strftime('%d.%m.%Y at %H:%M') }}
+        Päivitetty viimeksi: {{ case.updated_at.strftime('%d.%m.%Y klo %H:%M') }}
     </div>
 </div>
 {% endblock %}

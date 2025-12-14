@@ -244,8 +244,69 @@ a:hover {
 
 .filter-group {
     display: flex;
-    gap: var(--space-sm);
+    gap: var(--space-md);
     flex-wrap: wrap;
+    align-items: center;
+}
+
+/* Toggle filter - primary actionable filter */
+.toggle-filter {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    cursor: pointer;
+    padding: var(--space-sm) var(--space-md);
+    background: var(--color-forest-bg);
+    border: 1px solid var(--color-forest);
+    border-radius: var(--radius-full);
+    transition: all var(--transition-fast);
+}
+
+.toggle-filter:hover {
+    background: var(--color-forest);
+}
+
+.toggle-filter:hover .toggle-label {
+    color: white;
+}
+
+.toggle-filter input[type="checkbox"] {
+    appearance: none;
+    width: 18px;
+    height: 18px;
+    border-radius: 4px;
+    border: 2px solid var(--color-forest);
+    background: white;
+    cursor: pointer;
+    position: relative;
+    transition: all var(--transition-fast);
+}
+
+.toggle-filter input[type="checkbox"]:checked {
+    background: var(--color-forest);
+}
+
+.toggle-filter input[type="checkbox"]:checked::after {
+    content: '✓';
+    position: absolute;
+    top: -1px;
+    left: 2px;
+    color: white;
+    font-size: 12px;
+    font-weight: bold;
+}
+
+.toggle-label {
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--color-forest);
+}
+
+/* Municipality badge in card */
+.case-municipality {
+    font-size: 0.75rem;
+    color: var(--color-text-muted);
+    font-weight: 500;
 }
 
 .filter-select, .search-input {

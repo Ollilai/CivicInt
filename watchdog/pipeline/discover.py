@@ -16,11 +16,13 @@ def get_connector(source: Source):
     from watchdog.connectors.cloudnc import CloudNCConnector
     from watchdog.connectors.dynasty import DynastyConnector
     from watchdog.connectors.tweb import TWebConnector
-    
+    from watchdog.connectors.municipal_website import MunicipalWebsiteConnector
+
     connector_map = {
         "cloudnc": CloudNCConnector,
         "dynasty": DynastyConnector,
         "tweb": TWebConnector,
+        "municipal_website": MunicipalWebsiteConnector,
     }
     
     connector_class = connector_map.get(source.platform)

@@ -1,151 +1,146 @@
-# Lapland Data Collection Plan: Adding Missing Municipalities
+# Lapland Data Collection Plan: Complete Coverage
 
 ## Executive Summary
 
-CivicInt currently collects data from **19 of 21** Lapland municipalities. Two municipalities remain disabled:
+Based on comprehensive manual data collection, here's the complete picture:
 
-| Municipality | Platform | Status | Issue |
-|-------------|----------|--------|-------|
-| **Salla** | pdf | Disabled | No connector implementation |
-| **Utsjoki** | pdf | Disabled | No connector implementation |
+| Category | Current | Target | Gap |
+|----------|---------|--------|-----|
+| Municipalities | 19/21 | 21/21 | Salla, Utsjoki |
+| Regional Organizations | 0/3 | 3/3 | Lapin Liitto, ELY-keskus, Hyvinvointialue |
+| Document Types | 2 | 5 | +Viranhaltijapäätökset, Kuulutukset, Kaavat |
 
-These municipalities don't use standard decision platforms (Dynasty, CloudNC, TWeb). Instead, they publish PDFs directly on their WordPress-based municipal websites.
-
----
-
-## Problem Analysis
-
-### Current Architecture
-
-The discovery pipeline (`watchdog/pipeline/discover.py:20-24`) has a connector map:
-
-```python
-connector_map = {
-    "cloudnc": CloudNCConnector,
-    "dynasty": DynastyConnector,
-    "tweb": TWebConnector,
-    # "pdf" IS MISSING - causes ValueError if enabled
-}
-```
-
-When a source has `platform="pdf"`, the system crashes with:
-```
-ValueError: Unknown platform: pdf
-```
-
-### Target Sites
-
-**Salla:**
-- Decision page: `https://www.salla.fi/hallinto-ja-paatoksenteko/esityslistat-ja-poytakirjat/`
-- Officer decisions: `https://www.salla.fi/hallinto-ja-paatoksenteko/viranhaltijapaatokset/`
-- Site type: WordPress
-
-**Utsjoki:**
-- Decision page: `https://www.utsjoki.fi/hallinto/esityslistat-ja-poytakirjat/`
-- Officer decisions: `https://www.utsjoki.fi/hallinto/viranhaltijapaatokset/`
-- Site type: WordPress
-
-### Challenge
-
-Both sites return **403 Forbidden** for automated requests, meaning:
-1. They likely have bot protection (Cloudflare, WordPress security plugin)
-2. Standard HTTP client requests are blocked
-3. May require browser-like headers or session handling
+**Critical Discovery:** Salla actually uses **TWeb**, not PDF! The original configuration was wrong.
 
 ---
 
-## Implementation Options
+## Current vs. Actual Platform Analysis
 
-### Option A: WordPress/Generic HTML Connector (Recommended)
+### Salla - EASY FIX (Wrong Platform Configuration)
 
-Create a new connector specifically for municipal websites that publish PDFs without a standard platform.
+| Field | Current | Correct |
+|-------|---------|---------|
+| Platform | `pdf` | `tweb` |
+| Base URL | salla.fi | `http://salla.tweb.fi` |
 
-**Pros:**
-- Reusable for any municipality with similar setup
-- Clean architecture following existing patterns
-- Configurable per-municipality via `config_json`
+**Actual TWeb URLs:**
+- Esityslistat: `http://salla.tweb.fi/ktwebbin/dbisa.dll/ktwebscr/epj_tek_tweb.htm`
+- Pöytäkirjat: `http://salla.tweb.fi/ktwebbin/dbisa.dll/ktwebscr/pk_tek_tweb.htm`
+- Viranhaltijapäätökset: `http://salla.tweb.fi/ktwebbin/dbisa.dll/ktwebscr/vparhaku_tweb.htm`
+- Kuulutukset: `http://salla.tweb.fi/ktwebbin/dbisa.dll/ktwebscr/kuullist_tweb.htm`
 
-**Cons:**
-- Must handle 403 blocking (may need headers/cookies)
-- Site structure may vary between municipalities
+**Fix:** Update database source configuration - no code changes needed!
 
-**Implementation Steps:**
+### Utsjoki - Needs New Connector
 
-1. **Create `watchdog/connectors/municipal_website.py`**
-   - Inherit from `BaseConnector`
-   - Accept configuration for listing page paths
-   - Support multiple discovery strategies
-   - Handle WordPress-specific patterns
+Utsjoki is the **only** municipality that genuinely uses WordPress for document publishing:
+- Esityslistat/Pöytäkirjat: `https://www.utsjoki.fi/kunta-ja-paatoksenteko/paatoksenteko/esityslistat-ja-poytakirjat/`
+- Viranhaltijapäätökset: `https://www.utsjoki.fi/kunta-ja-paatoksenteko/paatoksenteko/viranhaltijapaatokset/`
+- Kuulutukset: None available
 
-2. **Add to connector map** in `discover.py`:
-   ```python
-   connector_map = {
-       "cloudnc": CloudNCConnector,
-       "dynasty": DynastyConnector,
-       "tweb": TWebConnector,
-       "municipal_website": MunicipalWebsiteConnector,
-   }
-   ```
-
-3. **Update database sources** for Salla and Utsjoki:
-   ```sql
-   UPDATE sources SET
-     platform = 'municipal_website',
-     enabled = TRUE,
-     config_json = '{
-       "listing_paths": ["/hallinto-ja-paatoksenteko/esityslistat-ja-poytakirjat/"],
-       "municipality": "Salla"
-     }'
-   WHERE municipality = 'Salla';
-   ```
-
-### Option B: Enhanced HTTP Client with Browser Emulation
-
-Add browser-like capabilities to bypass 403 blocks.
-
-**Implementation:**
-- Use `httpx` with realistic headers (Accept, Accept-Language, etc.)
-- Add `Referer` header matching the site
-- Consider rotating User-Agent strings
-- Implement session handling for cookies
-
-### Option C: Playwright/Selenium Integration
-
-Use headless browser for JavaScript-heavy sites.
-
-**Pros:**
-- Can handle any site, including those requiring JavaScript
-- Bypasses most bot detection
-
-**Cons:**
-- Heavy dependency (Chromium binary)
-- Slower execution
-- More resource intensive
-- May be overkill for WordPress sites
-
-### Option D: Direct PDF URL Configuration
-
-For simplest implementation, manually configure known PDF URLs.
-
-**Pros:**
-- Fast to implement
-- No complex parsing needed
-
-**Cons:**
-- Requires manual updates when new meetings occur
-- Not sustainable for ongoing monitoring
+**Fix:** Create `MunicipalWebsiteConnector` for WordPress sites.
 
 ---
 
-## Recommended Approach: Option A + B
+## New Regional Organizations to Add
 
-Combine the generic connector with enhanced HTTP handling.
+### 1. Lapin Liitto (Regional Council) - Dynasty
 
-### Implementation Plan
+| Document Type | URL |
+|---------------|-----|
+| Esityslistat | `https://lapinliittod10.oncloudos.com/cgi/DREQUEST.PHP?page=meeting_handlers&id=` |
+| Pöytäkirjat | `https://lapinliittod10.oncloudos.com/cgi/DREQUEST.PHP?page=meeting_handlers&id=` |
+| Viranhaltijapäätökset | `https://lapinliittod10.oncloudos.com/cgi/DREQUEST.PHP?page=official_handlers&id=` |
+| Kuulutukset | `https://www.lapinliitto.fi/arkisto/ajankohtaista/kuulutus/` (WordPress) |
 
-#### Phase 1: Create Municipal Website Connector
+**Platform:** Dynasty (existing connector works)
 
-**File: `watchdog/connectors/municipal_website.py`**
+### 2. Lapin ELY-keskus (Regional Authority) - Special
+
+| Document Type | URL |
+|---------------|-----|
+| Kuulutukset | `https://www.ely-keskus.fi/-/lap-kuulutukset` |
+
+**Platform:** WordPress/custom (limited scope - only announcements)
+
+### 3. Lapin Hyvinvointialue (Wellbeing Services) - TWeb
+
+| Document Type | URL |
+|---------------|-----|
+| Esityslistat | `https://lapha-julkaisu.tweb.fi/ktwebscr/epj_tek_tweb.htm` |
+| Pöytäkirjat | `https://lapha-julkaisu.tweb.fi/ktwebscr/pk_tek_tweb.htm` |
+| Viranhaltijapäätökset | `https://lapha-julkaisu.tweb.fi/ktwebscr/vparhaku_tweb.htm` |
+| Kuulutukset | `https://lapha-julkaisu.tweb.fi/ktwebscr/kuullist_tweb.htm` |
+
+**Platform:** TWeb (existing connector works)
+
+---
+
+## Complete Platform Distribution
+
+| Platform | Count | Organizations |
+|----------|-------|---------------|
+| **CloudNC** | 3 | Enontekiö, Muonio, Rovaniemi |
+| **Dynasty** | 10 | Inari, Kemi, Kemijärvi, Kittilä, Pelkosenniemi, Ranua, Savukoski, Simo, Tornio, **Lapin Liitto** |
+| **TWeb** | 10 | Keminmaa, Kolari, Pello, Posio, Sodankylä, Tervola, Ylitornio, **Salla**, **Lapin Hyvinvointialue** |
+| **WordPress** | 2 | **Utsjoki**, **Lapin ELY-keskus** (limited) |
+
+---
+
+## Document Types Overview
+
+| Type | Finnish | Description | Priority |
+|------|---------|-------------|----------|
+| Esityslistat | Agendas | Upcoming meeting items | High |
+| Pöytäkirjat | Minutes | Decisions made | High |
+| Viranhaltijapäätökset | Officer Decisions | Administrative decisions | High |
+| Kuulutukset | Announcements | Public notices, permits | High |
+| Kaavat | Zoning Plans | Land use planning | Medium |
+
+---
+
+## Implementation Plan
+
+### Phase 1: Quick Wins (No Code Changes)
+
+**1.1 Fix Salla Configuration**
+```sql
+UPDATE sources
+SET platform = 'tweb',
+    base_url = 'http://salla.tweb.fi',
+    enabled = TRUE,
+    config_json = '{"municipality": "Salla", "listing_paths": ["/ktwebbin/dbisa.dll/ktwebscr/pk_tek_tweb.htm"]}'
+WHERE municipality = 'Salla';
+```
+
+Or via CLI:
+```bash
+# Delete old source and add correct one
+watchdog-cli add-source \
+  --municipality "Salla" \
+  --platform tweb \
+  --base-url "http://salla.tweb.fi"
+```
+
+**1.2 Add Lapin Hyvinvointialue (TWeb)**
+```bash
+watchdog-cli add-source \
+  --municipality "Lapin hyvinvointialue" \
+  --platform tweb \
+  --base-url "https://lapha-julkaisu.tweb.fi"
+```
+
+**1.3 Add Lapin Liitto (Dynasty)**
+```bash
+watchdog-cli add-source \
+  --municipality "Lapin Liitto" \
+  --platform dynasty \
+  --base-url "https://lapinliittod10.oncloudos.com"
+```
+
+### Phase 2: WordPress Connector (For Utsjoki & ELY-keskus)
+
+Create `watchdog/connectors/municipal_website.py`:
 
 ```python
 """Generic connector for municipal websites publishing PDFs."""
@@ -162,15 +157,13 @@ from watchdog.connectors.base import BaseConnector, DocumentRef
 
 class MunicipalWebsiteConnector(BaseConnector):
     """
-    Connector for municipal websites that publish PDFs directly.
+    Connector for WordPress/custom municipal websites.
 
-    Used by: Salla, Utsjoki (and potentially others)
+    Used by: Utsjoki, Lapin ELY-keskus (kuulutukset only)
 
     Configuration (via config_json):
     - listing_paths: List of paths to scrape for PDF links
     - municipality: Municipality name
-    - pdf_pattern: Optional regex for matching PDF URLs
-    - body_patterns: Dict mapping keywords to committee names
     """
 
     @property
@@ -178,14 +171,13 @@ class MunicipalWebsiteConnector(BaseConnector):
         return "municipal_website"
 
     async def _get_client(self):
-        """Get HTTP client with browser-like headers."""
+        """Get HTTP client with browser-like headers to bypass bot detection."""
         import httpx
 
         if self._client is None:
-            # Enhanced headers to bypass basic bot detection
             headers = {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36",
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
                 "Accept-Language": "fi-FI,fi;q=0.9,en;q=0.8",
                 "Accept-Encoding": "gzip, deflate, br",
                 "DNT": "1",
@@ -221,21 +213,18 @@ class MunicipalWebsiteConnector(BaseConnector):
         documents = []
         soup = BeautifulSoup(html, "lxml")
 
-        # Find all PDF links
-        pdf_pattern = self.config.get("pdf_pattern", r"\.pdf")
-
         for link in soup.find_all("a", href=True):
             href = link.get("href", "")
 
-            # Check if this is a PDF link
-            if not re.search(pdf_pattern, href, re.IGNORECASE):
+            # Match PDF links
+            if not re.search(r"\.pdf", href, re.IGNORECASE):
                 continue
 
             full_url = urljoin(base_url, href)
             link_text = link.get_text(strip=True)
 
-            # Get surrounding context
-            parent = link.find_parent(["li", "p", "div", "td"])
+            # Get surrounding context for metadata extraction
+            parent = link.find_parent(["li", "p", "div", "td", "article"])
             context = parent.get_text(" ", strip=True) if parent else link_text
 
             doc = DocumentRef(
@@ -254,8 +243,8 @@ class MunicipalWebsiteConnector(BaseConnector):
         return documents
 
     def _extract_body(self, text: str) -> str:
-        """Extract committee/body name from text."""
-        default_patterns = {
+        """Extract committee name from text."""
+        patterns = {
             "valtuusto": "Kunnanvaltuusto",
             "hallitus": "Kunnanhallitus",
             "ympäristö": "Ympäristölautakunta",
@@ -266,55 +255,39 @@ class MunicipalWebsiteConnector(BaseConnector):
             "tarkastus": "Tarkastuslautakunta",
         }
 
-        patterns = self.config.get("body_patterns", default_patterns)
         text_lower = text.lower()
-
         for key, value in patterns.items():
             if key in text_lower:
                 return value
-
         return "Tuntematon"
 
     def _extract_date(self, text: str) -> Optional[datetime]:
-        """Extract date from text (Finnish format)."""
-        patterns = [
-            r"(\d{1,2})\.(\d{1,2})\.(\d{4})",  # 13.12.2024
-            r"(\d{4})-(\d{2})-(\d{2})",         # 2024-12-13
-        ]
-
-        for pattern in patterns:
-            match = re.search(pattern, text)
-            if match:
-                groups = match.groups()
-                try:
-                    if len(groups[0]) == 4:
-                        return datetime(int(groups[0]), int(groups[1]), int(groups[2]))
-                    else:
-                        return datetime(int(groups[2]), int(groups[1]), int(groups[0]))
-                except ValueError:
-                    pass
-
+        """Extract Finnish date from text."""
+        match = re.search(r"(\d{1,2})\.(\d{1,2})\.(\d{4})", text)
+        if match:
+            try:
+                return datetime(int(match.group(3)), int(match.group(2)), int(match.group(1)))
+            except ValueError:
+                pass
         return None
 
     def _extract_doc_type(self, text: str) -> str:
         """Extract document type."""
         text_lower = text.lower()
-
         if "esityslista" in text_lower:
             return "agenda"
         elif "pöytäkirja" in text_lower:
             return "minutes"
         elif "päätös" in text_lower:
             return "decision"
-
+        elif "kuulutus" in text_lower:
+            return "announcement"
         return "minutes"
 ```
 
-#### Phase 2: Update Discovery Pipeline
+### Phase 3: Register Connector
 
-**File: `watchdog/pipeline/discover.py`**
-
-Add the new connector to the map:
+**Update `watchdog/pipeline/discover.py`:**
 
 ```python
 from watchdog.connectors.municipal_website import MunicipalWebsiteConnector
@@ -323,103 +296,110 @@ connector_map = {
     "cloudnc": CloudNCConnector,
     "dynasty": DynastyConnector,
     "tweb": TWebConnector,
-    "municipal_website": MunicipalWebsiteConnector,
+    "municipal_website": MunicipalWebsiteConnector,  # NEW
 }
 ```
 
-#### Phase 3: Update CLI
-
-**File: `watchdog/cli.py`**
-
-Add `municipal_website` to allowed platform choices:
+**Update `watchdog/cli.py`:**
 
 ```python
 parser_add.add_argument("--platform", "-p", required=True,
                        choices=["cloudnc", "dynasty", "tweb", "municipal_website"])
 ```
 
-#### Phase 4: Database Configuration
+### Phase 4: Configure WordPress Sources
 
-**Add/Update Salla source:**
-```bash
-watchdog-cli add-source \
-  --municipality "Salla" \
-  --platform municipal_website \
-  --base-url "https://www.salla.fi" \
-  --config '{"listing_paths": ["/hallinto-ja-paatoksenteko/esityslistat-ja-poytakirjat/", "/hallinto-ja-paatoksenteko/viranhaltijapaatokset/"], "municipality": "Salla"}'
-```
-
-**Add/Update Utsjoki source:**
+**Utsjoki:**
 ```bash
 watchdog-cli add-source \
   --municipality "Utsjoki" \
   --platform municipal_website \
   --base-url "https://www.utsjoki.fi" \
-  --config '{"listing_paths": ["/hallinto/esityslistat-ja-poytakirjat/", "/hallinto/viranhaltijapaatokset/"], "municipality": "Utsjoki"}'
+  --config '{"listing_paths": ["/kunta-ja-paatoksenteko/paatoksenteko/esityslistat-ja-poytakirjat/", "/kunta-ja-paatoksenteko/paatoksenteko/viranhaltijapaatokset/"], "municipality": "Utsjoki"}'
 ```
 
-#### Phase 5: Handle 403 Responses
-
-If sites still return 403, additional measures:
-
-1. **Add Referer header**: Match the site's own URL
-2. **Session handling**: Fetch homepage first to get cookies
-3. **Retry with delays**: Some sites rate-limit aggressively
-4. **Consider proxy rotation**: For production use
-
----
-
-## Testing Plan
-
-1. **Unit tests**: Test connector with mock HTML responses
-2. **Integration tests**: Test against real sites (manual verification)
-3. **Monitoring**: Check admin dashboard for successful fetches
+**Lapin ELY-keskus (kuulutukset only):**
+```bash
+watchdog-cli add-source \
+  --municipality "Lapin ELY-keskus" \
+  --platform municipal_website \
+  --base-url "https://www.ely-keskus.fi" \
+  --config '{"listing_paths": ["/-/lap-kuulutukset"], "municipality": "Lapin ELY-keskus"}'
+```
 
 ---
 
-## Risk Assessment
+## Extended Data Collection (Document Types)
 
-| Risk | Likelihood | Impact | Mitigation |
-|------|------------|--------|------------|
-| Sites continue blocking | Medium | High | Try browser emulation, contact municipality |
-| Site structure changes | Low | Medium | Configurable selectors, monitoring alerts |
-| Rate limiting | Medium | Low | Already have rate limiter, add backoff |
-| PDF download issues | Low | Low | Existing fetch pipeline handles this |
+The current system primarily collects from meeting pages. To fully support all document types:
 
----
+### Current Connector Enhancements Needed
 
-## Alternative: Contact Municipalities
+| Connector | Current | Enhancement |
+|-----------|---------|-------------|
+| CloudNC | Toimielimet | Add `/Viranhaltijat`, `/Kuulutukset` paths |
+| Dynasty | meeting_frames | Add `official_frames`, `announcement_search` |
+| TWeb | pk_tek_tweb.htm | Add `vparhaku_tweb.htm`, `kuullist_tweb.htm` |
 
-If technical solutions fail, consider:
+### Suggested Config Structure
 
-1. **Email municipality IT**: Explain the civic transparency project
-2. **Request RSS feed**: Many WordPress sites can enable this
-3. **Request API access**: Some may have internal APIs
-4. **Ask for whitelist**: Get the bot User-Agent whitelisted
+Enhance `config_json` to support multiple document type paths:
 
----
-
-## Timeline Estimate
-
-| Phase | Tasks | Dependencies |
-|-------|-------|-------------|
-| Phase 1 | Create connector | None |
-| Phase 2 | Update discover.py | Phase 1 |
-| Phase 3 | Update CLI | Phase 2 |
-| Phase 4 | Configure sources | Phase 3 |
-| Phase 5 | Handle 403 (if needed) | Phase 4 |
-| Testing | Verify data flow | All phases |
+```json
+{
+  "municipality": "Keminmaa",
+  "paths": {
+    "meetings": "/ktwebscr/pk_tek_tweb.htm",
+    "agendas": "/ktwebscr/epj_tek_tweb.htm",
+    "officer_decisions": "/ktwebscr/vparhaku_tweb.htm",
+    "announcements": "/ktwebscr/kuullist_tweb.htm"
+  }
+}
+```
 
 ---
 
-## Summary
+## Summary: Action Items
 
-To complete Lapland coverage:
+| Priority | Task | Effort | Impact |
+|----------|------|--------|--------|
+| 🔴 High | Fix Salla → TWeb | 5 min | +1 municipality |
+| 🔴 High | Add Lapin Hyvinvointialue (TWeb) | 5 min | +1 regional org |
+| 🔴 High | Add Lapin Liitto (Dynasty) | 5 min | +1 regional org |
+| 🟡 Medium | Create WordPress connector | 2-3 hrs | Enables Utsjoki |
+| 🟡 Medium | Add Utsjoki (WordPress) | 15 min | +1 municipality |
+| 🟡 Medium | Add ELY-keskus (WordPress) | 15 min | +1 regional org |
+| 🟢 Low | Enhance connectors for all doc types | 4-6 hrs | +3 document types |
 
-1. **Create** `municipal_website` connector (~150 lines)
-2. **Register** it in the connector map
-3. **Configure** Salla and Utsjoki as sources
-4. **Test** and monitor for successful data collection
-5. **Handle** 403 blocks if they persist
+---
 
-This approach follows existing architectural patterns and provides a reusable solution for any future municipalities with similar setups.
+## Final Coverage After Implementation
+
+| Organization | Platform | Status |
+|--------------|----------|--------|
+| Enontekiö | CloudNC | ✅ Working |
+| Inari | Dynasty | ✅ Working |
+| Kemi | Dynasty | ✅ Working |
+| Kemijärvi | Dynasty | ✅ Working |
+| Keminmaa | TWeb | ✅ Working |
+| Kittilä | Dynasty | ✅ Working |
+| Kolari | TWeb | ✅ Working |
+| Muonio | CloudNC | ✅ Working |
+| Pello | TWeb | ✅ Working |
+| Pelkosenniemi | Dynasty | ✅ Working |
+| Posio | TWeb | ✅ Working |
+| Ranua | Dynasty | ✅ Working |
+| Rovaniemi | CloudNC | ✅ Working |
+| **Salla** | **TWeb** | 🔧 Fix config |
+| Savukoski | Dynasty | ✅ Working |
+| Simo | Dynasty | ✅ Working |
+| Sodankylä | TWeb | ✅ Working |
+| Tervola | TWeb | ✅ Working |
+| Tornio | Dynasty | ✅ Working |
+| **Utsjoki** | **WordPress** | 🆕 New connector |
+| Ylitornio | TWeb | ✅ Working |
+| **Lapin Liitto** | **Dynasty** | 🆕 Add source |
+| **Lapin ELY-keskus** | **WordPress** | 🆕 New connector |
+| **Lapin Hyvinvointialue** | **TWeb** | 🆕 Add source |
+
+**Total: 24 organizations, 100% Lapland coverage**

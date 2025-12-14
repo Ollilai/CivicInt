@@ -3,25 +3,25 @@
 {% block content %}
 <div class="admin-container">
     <header class="admin-header">
-        <h1>Admin Dashboard</h1>
+        <h1>Hallintapaneeli</h1>
     </header>
 
     <div class="stats-grid">
         <div class="stat-card">
             <div class="stat-value">{{ sources|length }}</div>
-            <div class="stat-label">Data Sources</div>
+            <div class="stat-label">Datalähteet</div>
         </div>
         <div class="stat-card">
             <div class="stat-value">{{ doc_count }}</div>
-            <div class="stat-label">Documents</div>
+            <div class="stat-label">Asiakirjat</div>
         </div>
         <div class="stat-card">
             <div class="stat-value">{{ case_count }}</div>
-            <div class="stat-label">Cases</div>
+            <div class="stat-label">Tapaukset</div>
         </div>
         <div class="stat-card stat-card-budget">
             <div class="stat-value">€{{ "%.2f"|format(llm_spend) }} / €{{ "%.0f"|format(llm_budget) }}</div>
-            <div class="stat-label">LLM Budget (This Month)</div>
+            <div class="stat-label">LLM-budjetti (tämä kuukausi)</div>
             <div class="budget-bar">
                 <div class="budget-fill" style="width: {{ (llm_spend / llm_budget * 100) if llm_budget else 0 }}%">
                 </div>
@@ -30,17 +30,17 @@
     </div>
 
     <section class="admin-section">
-        <h2>📡 Data Sources</h2>
+        <h2>📡 Datalähteet</h2>
 
         {% if sources %}
         <table class="admin-table">
             <thead>
                 <tr>
-                    <th>Municipality</th>
-                    <th>Platform</th>
-                    <th>Status</th>
-                    <th>Last Success</th>
-                    <th>Errors</th>
+                    <th>Kunta</th>
+                    <th>Alusta</th>
+                    <th>Tila</th>
+                    <th>Viimeisin onnistuminen</th>
+                    <th>Virheet</th>
                 </tr>
             </thead>
             <tbody>
@@ -53,17 +53,17 @@
                         {% if source.consecutive_failures == 0 %}
                         <span class="status-badge status-ok">✓ OK</span>
                         {% else %}
-                        <span class="status-badge status-error">✗ {{ source.consecutive_failures }} fails</span>
+                        <span class="status-badge status-error">✗ {{ source.consecutive_failures }} virhettä</span>
                         {% endif %}
                         {% else %}
-                        <span class="status-badge status-disabled">Disabled</span>
+                        <span class="status-badge status-disabled">Pois käytöstä</span>
                         {% endif %}
                     </td>
                     <td>
                         {% if source.last_success_at %}
                         {{ source.last_success_at.strftime('%d.%m.%Y %H:%M') }}
                         {% else %}
-                        Never
+                        Ei koskaan
                         {% endif %}
                     </td>
                     <td class="error-cell">
@@ -79,28 +79,28 @@
         </table>
         {% else %}
         <div class="empty-state">
-            <p>No sources configured. Add sources with:</p>
-            <code>python -m watchdog.cli add-source -m "Municipality" -p platform -u "https://..."</code>
+            <p>Ei datalähteitä. Lisää lähde komennolla:</p>
+            <code>python -m watchdog.cli add-source -m "Kunta" -p platform -u "https://..."</code>
         </div>
         {% endif %}
     </section>
 
     <section class="admin-section">
-        <h2>🛠️ Quick Actions</h2>
+        <h2>🛠️ Pikatoiminnot</h2>
         <div class="actions-grid">
             <div class="action-card">
-                <h3>Run Pipeline</h3>
-                <p>Discover, fetch, and process new documents</p>
+                <h3>Aja putki</h3>
+                <p>Hae, tunnista ja käsittele uudet asiakirjat</p>
                 <code>python -m watchdog.cli run-pipeline</code>
             </div>
             <div class="action-card">
-                <h3>Check Health</h3>
-                <p>View connector status summary</p>
+                <h3>Tarkista tila</h3>
+                <p>Näytä datalähteiden tilanne</p>
                 <code>python -m watchdog.cli health</code>
             </div>
             <div class="action-card">
-                <h3>Add Source</h3>
-                <p>Add a new municipality to monitor</p>
+                <h3>Lisää lähde</h3>
+                <p>Lisää uusi kunta seurantaan</p>
                 <code>python -m watchdog.cli add-source --help</code>
             </div>
         </div>

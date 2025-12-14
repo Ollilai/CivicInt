@@ -104,17 +104,23 @@ async def index(request: Request, db: Session = Depends(get_db)):
 @app.get("/feed", response_class=HTMLResponse)
 async def feed(request: Request, db: Session = Depends(get_db)):
     """Case feed page."""
-    from watchdog.db.models import Case
+    from watchdog.db.models import Case, Source
+    import json
     
     # Get recent cases
     cases = db.query(Case).order_by(Case.updated_at.desc()).limit(50).all()
+    
+    # Get ALL municipalities from Sources (not just those with cases)
+    sources = db.query(Source).filter(Source.enabled == True).all()
+    municipalities = sorted(set(s.municipality for s in sources))
     
     return templates.TemplateResponse(
         "feed.html",
         {
             "request": request,
             "cases": cases,
-            "title": "Cases",
+            "municipalities": municipalities,
+            "title": "Tapaukset",
         }
     )
 

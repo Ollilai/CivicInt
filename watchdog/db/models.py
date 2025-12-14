@@ -116,6 +116,11 @@ class Document(Base):
     status: Mapped[str] = mapped_column(String(20), default=DocumentStatus.NEW)
     content_hash: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     
+    # Triage results
+    triage_score: Mapped[Optional[float]] = mapped_column(Float, nullable=True)  # 0.0-1.0
+    triage_categories: Mapped[Optional[str]] = mapped_column(JSON, nullable=True)  # ["extraction", "zoning", ...]
+    triage_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # Why it was flagged
+    
     discovered_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 

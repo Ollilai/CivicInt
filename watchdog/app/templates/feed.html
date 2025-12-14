@@ -3,77 +3,101 @@
 {% block content %}
 <div class="feed-container">
     <header class="feed-header">
-        <h1>Environmental Cases</h1>
-        <p class="feed-subtitle">{{ cases|length }} cases found</p>
+        <h1>Ympäristötapaukset</h1>
+        <p class="feed-subtitle">Seurannassa {{ cases|length }} tapausta Lapin kunnista</p>
     </header>
 
     <div class="filters-bar">
         <div class="filter-group">
-            <select id="filter-category" class="filter-select">
-                <option value="">All Categories</option>
-                <option value="zoning">🏗️ Zoning & Land-use</option>
-                <option value="permits">📋 Permits & Extraction</option>
-                <option value="water">💧 Water & Wetlands</option>
-                <option value="industry">🏭 Industry & Infrastructure</option>
+            {# Primary filter: Can I influence this? #}
+            <label class="toggle-filter">
+                <input type="checkbox" id="filter-actionable" checked>
+                <span class="toggle-label">Vain avoimet kuulemiset</span>
+            </label>
+
+            {# Municipality filter #}
+            <select id="filter-municipality" class="filter-select">
+                <option value="">Kaikki kunnat</option>
+                {% for municipality in municipalities %}
+                <option value="{{ municipality }}">{{ municipality }}</option>
+                {% endfor %}
             </select>
 
-            <select id="filter-confidence" class="filter-select">
-                <option value="">All Confidence</option>
-                <option value="high">🟢 High Only</option>
-                <option value="medium">🟡 Medium+</option>
+            {# Category filter #}
+            <select id="filter-category" class="filter-select">
+                <option value="">Kaikki aiheet</option>
+                <option value="extraction">Maa-ainekset & Luvat</option>
+                <option value="zoning">Kaavoitus & Maankäyttö</option>
+                <option value="energy">Energia & Infrastruktuuri</option>
+                <option value="forestry">Metsätalous</option>
+                <option value="water">Vesistöt & Kosteikot</option>
             </select>
         </div>
 
         <div class="search-box">
-            <input type="text" id="search" placeholder="Search cases..." class="search-input">
+            <input type="text" id="search" placeholder="Hae..." class="search-input">
         </div>
     </div>
 
     <div class="cases-grid" id="cases-grid">
         {% if cases %}
         {% for case in cases %}
-        <article class="case-card" data-category="{{ case.primary_category }}" data-confidence="{{ case.confidence }}">
-            <div class="case-header">
-                <span class="case-category category-{{ case.primary_category }}">
-                    {% if case.primary_category == 'zoning' %}🏗️{% elif case.primary_category == 'permits' %}📋{% elif
-                    case.primary_category == 'water' %}💧{% elif case.primary_category == 'industry' %}🏭{% else %}📄{%
-                    endif %}
-                    {{ case.primary_category|title }}
-                </span>
-                <span class="case-confidence confidence-{{ case.confidence }}"
-                    title="{{ case.confidence_reason or 'No details' }}">
-                    {% if case.confidence == 'high' %}🟢{% elif case.confidence == 'medium' %}🟡{% else %}🔴{% endif %}
-                    {{ case.confidence|title }}
-                </span>
-            </div>
+        <article class="case-card" data-category="{{ case.primary_category }}" data-status="{{ case.status }}"
+            data-municipality="{{ case.municipalities_json|replace('[', '')|replace(']', '')|replace('\"', '') if case.municipalities_json else '' }}">
 
-            <h2 class="case-headline">{{ case.headline }}</h2>
-
-            <div class="case-summary">
-                {# SECURITY: Do not use |safe on LLM-generated content - XSS risk #}
-                {{ case.summary_md | e }}
-            </div>
-
-            <div class="case-meta">
-                <span class="case-status status-{{ case.status }}">{{ case.status|title }}</span>
-                <span class="case-time">{{ case.updated_at.strftime('%d.%m.%Y') }}</span>
-            </div>
-
-            <div class="case-actions">
-                <a href="/case/{{ case.id }}" class="btn btn-primary">View Dossier</a>
-                <button class="btn btn-icon btn-star" title="Star">⭐</button>
-                <button class="btn btn-icon btn-dismiss" title="Dismiss">✕</button>
-            </div>
-        </article>
-        {% endfor %}
-        {% else %}
-        <div class="empty-state">
-            <div class="empty-icon">📭</div>
-            <h2>No cases yet</h2>
-            <p>Run the pipeline to discover documents and build cases.</p>
-            <code>python -m watchdog.cli run-pipeline</code>
-        </div>
-        {% endif %}
+            {# Actionable badge - prominent at top #}
+            {% if case.status == ' proposed' %} <div class="case-deadline-banner deadline-soon">
+            <span>🗣️ Voit vaikuttaa</span>
     </div>
+    {% endif %}
+
+    <div class="case-card-body">
+        <div class="case-header">
+            <span class="case-category category-{{ case.primary_category }}">
+                {% if case.primary_category == 'extraction' %}Maa-ainekset
+                {% elif case.primary_category == 'zoning' %}Kaavoitus
+                {% elif case.primary_category == 'energy' %}Energia
+                {% elif case.primary_category == 'forestry' %}Metsätalous
+                {% elif case.primary_category == 'water' %}Vesistöt
+                {% else %}{{ case.primary_category|replace('_', ' ')|title }}{% endif %}
+            </span>
+            {% if case.municipalities_json %}
+            <span class="case-municipality">
+                📍 {{ case.municipalities_json|replace('[', '')|replace(']', '')|replace('"', '') }}
+            </span>
+            {% endif %}
+        </div>
+
+        <h2 class="case-headline">{{ case.headline }}</h2>
+
+        <div class="case-summary">
+            {# SECURITY: Do not use |safe on LLM-generated content - XSS risk #}
+            {{ case.summary_md | e }}
+        </div>
+
+        <div class="case-meta">
+            <span class="case-status status-{{ case.status }}">
+                {% if case.status == 'proposed' %}🟢 Vireillä{% elif case.status == 'approved' %}✓ Päätetty{% else %}{{
+                case.status|title }}{% endif %}
+            </span>
+            <span class="case-time">{{ case.updated_at.strftime('%d.%m.%Y') }}</span>
+        </div>
+
+        <div class="case-actions">
+            <a href="/case/{{ case.id }}" class="btn btn-primary">Avaa</a>
+            <button class="btn btn-icon btn-star" title="Tallenna seurantaan" aria-label="Tallenna">☆</button>
+        </div>
+    </div>
+    </article>
+    {% endfor %}
+    {% else %}
+    <div class="empty-state">
+        <div class="empty-icon">🌲</div>
+        <h2>Ei tapauksia vielä</h2>
+        <p>Vahtikoira on valmis seuraamaan kuntien ympäristöpäätöksiä.</p>
+        <code>python -m watchdog.cli run-pipeline --stage all</code>
+    </div>
+    {% endif %}
+</div>
 </div>
 {% endblock %}

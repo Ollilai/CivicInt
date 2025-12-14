@@ -16,25 +16,62 @@ from watchdog.db.models import (
 )
 
 
-TRIAGE_SYSTEM_PROMPT = """You are analyzing Finnish municipal environmental documents.
+TRIAGE_SYSTEM_PROMPT = """You are a nature conservation watchdog analyzing Finnish municipal documents.
 
-Classify each document into environmental categories and assess relevance.
+Your job: Flag ONLY decisions that a Green Party environmental activist would act on.
 
-Categories:
-1. zoning - Zoning & land-use (kaava, yleiskaava, osayleiskaava, asemakaava, poikkeaminen)
-2. permits - Permits & extraction (maa-aines, ympäristölupa, meluilmoitus, vesitalous)
-3. water - Water & wetlands (ojitus, kuivatus, rantarakentaminen, vesistö)
-4. industry - Industry & infrastructure (wind, mining, peat, major road projects)
+== FLAG THESE (high relevance) ==
 
-Return a JSON object with:
+EXTRACTION & PERMITS:
+- Maa-ainesluvat (gravel, sand, rock extraction permits)
+- Ympäristöluvat (environmental permits)
+- Poikkeusluvat in sensitive areas (variances near nature)
+- Mining applications or expansions (kaivostoiminta)
+- Peat extraction (turvetuotanto)
+
+LAND USE & ZONING:
+- Kaava changes near: waterways, forests, wetlands, Natura 2000, nature reserves
+- Rantakaava (shoreline zoning) - especially new construction
+- Industrial zoning in previously undeveloped areas
+- Rezoning forest/agricultural land for development
+
+ENERGY & INFRASTRUCTURE:
+- Wind farm permits and assessments (tuulivoima)
+- Solar farm applications (aurinkovoima)
+- Major road/rail projects through natural areas
+- Power line routes
+
+FORESTRY & WATER:
+- Forestry decisions on municipal land (kunnan metsät)
+- Ojitus (ditching/drainage) affecting wetlands
+- Vesistö modifications, dam permits
+- Anything mentioning ELY-keskus environmental statements (ELY-lausunto)
+
+== IGNORE THESE (score 0) ==
+
+- Committee reorganizations, mergers, appointments
+- School policies, library fees, daycare
+- Elderly care, social services, healthcare
+- HR decisions, salary matters, personnel
+- Generic budget approvals (unless environment-specific line items)
+- Building permits for ordinary residential (unless shoreline/sensitive area)
+- Internal governance, meeting schedules
+- Culture, sports, youth services
+
+== OUTPUT FORMAT ==
+
+Return JSON:
 {
-  "categories": ["zoning"],  // array of matching categories
-  "relevance_score": 0.85,   // 0.0 to 1.0
-  "candidate_reason": "Contains asemakaava proposal for industrial zone",
-  "is_environmental": true   // whether this is environment-related
+  "dominated": true/false,    // Is this document DOMINATED by environmental content?
+  "categories": ["extraction", "zoning", "energy", "forestry", "water"],
+  "relevance_score": 0.0-1.0, // 0.8+ = definitely actionable, 0.5-0.8 = maybe worth watching
+  "signal_reason": "Specific environmental decision found: ...",
+  "noise_indicators": ["Also contains unrelated items like..."]
 }
 
-Be strict: only mark as environmental if it clearly relates to land, permits, water, or industry.
+CRITICAL: Be aggressive about filtering. A document mentioning "ympäristö" in passing
+about committee structure is NOT environmental. Look for actual permits, actual land
+decisions, actual extraction applications. When in doubt, score LOW.
 """
 
 
@@ -137,25 +174,32 @@ def run():
         for doc, text in docs_with_text:
             try:
                 result = triage_document(doc, text, client, session)
-                
-                is_env = result.get("is_environmental", False)
+
+                is_dominated = result.get("dominated", False)
                 score = result.get("relevance_score", 0)
                 categories = result.get("categories", [])
-                
-                # Store triage result in document metadata (could add a column for this)
+                reason = result.get("signal_reason", "")
+
+                # Store triage results on document
                 doc.status = DocumentStatus.PROCESSED
-                
-                if is_env and score >= 0.5:
+                doc.triage_score = score
+                doc.triage_categories = json.dumps(categories)
+                doc.triage_reason = reason
+
+                # Higher threshold: must be dominated by env content AND score >= 0.6
+                if is_dominated and score >= 0.6:
                     candidates.append({
                         "doc": doc,
                         "text": text,
                         "categories": categories,
                         "score": score,
-                        "reason": result.get("candidate_reason", ""),
+                        "reason": reason,
                     })
-                    print(f"  ✓ Candidate: {doc.title[:50]}... ({score:.2f})")
+                    print(f"  ✓ SIGNAL: {doc.title[:50]}... ({score:.2f})")
+                elif score >= 0.4:
+                    print(f"  ~ Maybe: {doc.title[:50]}... ({score:.2f}) - {reason[:60]}")
                 else:
-                    print(f"  - Skip: {doc.title[:50]}... ({score:.2f})")
+                    print(f"  - Noise: {doc.title[:50]}... ({score:.2f})")
                 
             except Exception as e:
                 print(f"  ✗ Error: {doc.title[:50]}... - {e}")

@@ -23,43 +23,71 @@ from watchdog.db.models import (
 from watchdog.pipeline.triage import estimate_cost, truncate_text
 
 
-CASE_BUILDER_SYSTEM_PROMPT = """You are creating environmental case summaries for Finnish advocacy professionals.
+CASE_BUILDER_SYSTEM_PROMPT = """Olet ympäristöaktivistien tiedustelutyökalu. Luot toiminnallisia raportteja Suomen Vihreille ja muille ympäristöjärjestöille.
 
-Create actionable intelligence from municipal documents. Return JSON:
+KAIKKI TULOSTEESI TULEE OLLA SUOMEKSI.
 
+Käyttäjäsi:
+- Tekevät valituksia haitallisista luvista
+- Osallistuvat kuulemisiin
+- Kirjoittavat mielipidekirjoituksia
+- Koordinoivat ELY-keskuksen kanssa
+- Informoivat valtakunnallisia ympäristöjärjestöjä
+
+== MIKÄ TEKEE TAPAUKSESTA TOIMINNALLISEN ==
+
+1. MÄÄRÄAJAT: Valitusajat, muistutusajat, kuulemispäivät
+2. SIJAINTI: Tarkka alue, etäisyys Natura 2000 -alueisiin, vesistöihin, suojelualueisiin
+3. LAAJUUS: Hehtaarit, kuutiometrit, turbiinien määrä, ottomäärät
+4. PÄÄTÖSVAIHE: Vireillä vs hyväksytty vs valitettu
+5. TOIMIJAT: Hakija, vastuuvirkamies, ELY-yhteyshenkilö
+
+== TULOSTEEN MUOTO ==
+
+Palauta JSON:
 {
-  "headline": "Wind farm permit approved in Muonio",
+  "headline": "Maa-aineslupa (50 000 m³) vireillä Ounasjoen läheisyydessä – muistutusaika päättyy 15.2.",
   "debrief": [
-    "Permit granted for 15 wind turbines in northern area",
-    "Environmental impact assessment completed",
-    "30-day appeal window opened",
-    "Construction estimated to begin Q2 2025"
+    "MÄÄRÄAIKA: Muistutusaika päättyy 15.2.2025",
+    "SIJAINTI: 2 km Ounasjoelta, rajautuu kunnan metsään",
+    "LAAJUUS: 50 000 m³ kymmenessä vuodessa, 15 hehtaarin alue",
+    "HAKIJA: Lapin Sora Oy",
+    "ELY-lausuntoa pyydetty, ei vielä saapunut"
   ],
-  "status": "approved",  // proposed, approved, or unknown
+  "action_type": "comment_period",
+  "deadline": "2025-02-15",
+  "status": "proposed",
   "timeline": [
-    {"date": "2025-01-15", "event": "Permit application submitted"},
-    {"date": "2025-03-01", "event": "Public notice period ended"}
+    {"date": "2025-01-10", "event": "Hakemus jätetty"},
+    {"date": "2025-02-15", "event": "Muistutusaika päättyy"}
   ],
   "evidence": [
-    {"page": 3, "snippet": "Ympäristölupa myönnetään ehdoin...", "key_point": "Permit granted with conditions"}
+    {"page": 3, "snippet": "Tarkka suora lainaus asiakirjasta...", "key_point": "Mitä tämä todistaa"}
   ],
   "entities": {
-    "project_name": "Tuulivoimapuisto Pohjoinen",
-    "permit_number": "YL-2025-123",
-    "location": "Muonion pohjoinen alue",
-    "area_hectares": 150
+    "applicant": "Lapin Sora Oy",
+    "permit_number": "MAL-2025-42",
+    "location": "Kittilä, Ounasjoen itäpuoli",
+    "area_hectares": 15,
+    "volume_m3": 50000,
+    "nearest_protected": "Ounasjoki (2 km), Natura FI123456 (5 km)"
   },
-  "confidence": "high",  // high, medium, or low
-  "confidence_reason": "Explicit permit approval with clear timeline"
+  "confidence": "high",
+  "confidence_reason": "Selkeä lupahakemus, jossa on yksiselitteinen määräaika"
 }
 
-Rules:
-- Headline should be clear and actionable (max 100 chars)
-- Debrief: 3-6 key points, most important first
-- Only include timeline events explicitly mentioned in text
-- Evidence snippets should be exact quotes from source
-- Be accurate about status - use "unknown" if unclear
+== SÄÄNNÖT ==
+
+1. OTSIKKO: Sisällytä keskeiset luvut (hehtaarit, m³, MW) ja mahdollinen määräaika
+2. YHTEENVETO: Aloita määräajasta/toimenpiteestä, sitten sijainti, sitten laajuus
+3. Etsi aina: valitusaika, muistutusaika, nähtävilläolo, kuulutus
+4. Käytä suomalaista päivämäärämuotoa (15.2.2025), mutta deadline-kentässä ISO-muoto
+5. Jos ei toiminnallista määräaikaa, action_type = "monitoring" tai "info_only"
+6. Todisteiden lainausten on oltava TARKKOJA suoria lainauksia, ei parafraaseja
+7. KIRJOITA KAIKKI headline, debrief ja confidence_reason SUOMEKSI
 """
+
+
 
 
 def find_matching_case(doc: Document, entities: dict, session) -> Optional[Case]:
@@ -216,10 +244,10 @@ def run():
     SessionLocal = get_session_factory()
     
     with SessionLocal() as session:
-        # Get processed documents that don't have evidence yet
-        # (Simple heuristic - could track more explicitly)
+        # Only process documents that passed triage (score >= 0.6)
         processed_docs = session.query(Document).filter(
             Document.status == DocumentStatus.PROCESSED,
+            Document.triage_score >= 0.6,  # Only high-relevance docs
         ).all()
         
         # Filter to those with text and not yet linked to cases
@@ -235,8 +263,9 @@ def run():
             if text_files:
                 combined_text = "\n\n---\n\n".join(f.text_content for f in text_files if f.text_content)
                 if combined_text:
-                    # Default categories for now (should come from triage)
-                    candidates.append((doc, combined_text, ["unknown"]))
+                    # Get categories from triage (stored as JSON)
+                    categories = json.loads(doc.triage_categories) if doc.triage_categories else ["unknown"]
+                    candidates.append((doc, combined_text, categories))
         
         if not candidates:
             print("No documents ready for case building.")

@@ -4,37 +4,39 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}{{ title }}{% endblock %} | Watchdog</title>
-    <meta name="description" content="Environmental document watchdog for Finnish municipalities">
-    
+    <meta name="description" content="Environmental case monitor for Lapland municipalities">
+
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/static/style.css">
+
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌲</text></svg>">
 </head>
 <body>
     <nav class="navbar">
         <div class="nav-container">
             <a href="/" class="nav-brand">
-                <span class="nav-logo">🔍</span>
+                <span class="nav-logo">🌲</span>
                 <span class="nav-title">Watchdog</span>
             </a>
             <div class="nav-links">
-                <a href="/feed" class="nav-link {% if request.url.path == '/feed' %}active{% endif %}">Cases</a>
-                <a href="/admin" class="nav-link {% if '/admin' in request.url.path %}active{% endif %}">Admin</a>
+                <a href="/feed" class="nav-link {% if request.url.path == '/feed' or request.url.path.startswith('/case/') %}active{% endif %}">Cases</a>
+                <a href="/admin" class="nav-link {% if '/admin' in request.url.path %}active{% endif %}">Dashboard</a>
             </div>
         </div>
     </nav>
-    
+
     <main class="main-content">
         {% block content %}{% endblock %}
     </main>
-    
+
     <footer class="footer">
         <div class="footer-container">
-            <p>&copy; 2024 Watchdog MVP</p>
+            <p>Watchdog — Environmental case monitoring for Lapland</p>
         </div>
     </footer>
-    
+
     <script src="/static/app.js"></script>
 </body>
 </html>

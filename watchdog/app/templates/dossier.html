@@ -2,24 +2,27 @@
 
 {% block content %}
 <div class="dossier-container">
-    <a href="/feed" class="back-link">← Back to Cases</a>
+    <a href="/feed" class="back-link">← Back to all cases</a>
 
     <header class="dossier-header">
         <div class="dossier-badges">
             <span class="case-category category-{{ case.primary_category }}">
-                {% if case.primary_category == 'zoning' %}🏗️{% elif case.primary_category == 'permits' %}📋{% elif
-                case.primary_category == 'water' %}💧{% elif case.primary_category == 'industry' %}🏭{% else %}📄{%
-                endif %}
-                {{ case.primary_category|title }}
+                {{ case.primary_category|replace('_', ' ')|title }}
             </span>
             <span class="case-status status-{{ case.status }}">{{ case.status|title }}</span>
-            <span class="case-confidence confidence-{{ case.confidence }}">
-                {% if case.confidence == 'high' %}🟢{% elif case.confidence == 'medium' %}🟡{% else %}🔴{% endif %}
-                {{ case.confidence|title }} Confidence
+            <span class="case-confidence">
+                {{ case.confidence|title }} confidence
             </span>
         </div>
 
         <h1 class="dossier-headline">{{ case.headline }}</h1>
+
+        {% if case.municipalities_json %}
+        <div class="case-location" style="display: inline-flex; margin-bottom: 1rem;">
+            <span class="case-location-icon">📍</span>
+            <span>{{ case.municipalities_json|replace('[', '')|replace(']', '')|replace('"', '') }}</span>
+        </div>
+        {% endif %}
 
         {% if case.confidence_reason %}
         <p class="confidence-reason">{{ case.confidence_reason }}</p>
@@ -27,7 +30,7 @@
     </header>
 
     <section class="dossier-section">
-        <h2>📋 Executive Debrief</h2>
+        <h2>Key Information</h2>
         <div class="debrief-content">
             {# SECURITY: Do not use |safe on LLM-generated content - XSS risk #}
             {{ case.summary_md | e }}
@@ -36,7 +39,7 @@
 
     {% if case.events %}
     <section class="dossier-section">
-        <h2>📅 Timeline</h2>
+        <h2>Timeline</h2>
         <div class="timeline">
             {% for event in case.events %}
             <div class="timeline-item">
@@ -44,13 +47,15 @@
                     {% if event.event_time %}
                     {{ event.event_time.strftime('%d.%m.%Y') }}
                     {% else %}
-                    —
+                    Date pending
                     {% endif %}
                 </div>
                 <div class="timeline-content">
-                    <span class="timeline-type">{{ event.event_type }}</span>
+                    <span class="timeline-type">{{ event.event_type|replace('_', ' ')|title }}</span>
                     {% if event.payload_json %}
-                    <p>{{ event.payload_json }}</p>
+                    <p style="margin: 0.25rem 0 0; color: var(--color-text-secondary); font-size: 0.875rem;">
+                        {{ event.payload_json|replace('{', '')|replace('}', '')|replace('"description":', '')|replace('"', '') }}
+                    </p>
                     {% endif %}
                 </div>
             </div>
@@ -61,42 +66,55 @@
 
     {% if case.evidence %}
     <section class="dossier-section">
-        <h2>🔍 Evidence Pack</h2>
+        <h2>Evidence</h2>
         <div class="evidence-list">
             {% for ev in case.evidence %}
             <div class="evidence-item">
                 <div class="evidence-meta">
-                    {% if ev.page %}Page {{ ev.page }}{% endif %}
-                    <a href="{{ ev.source_url }}" target="_blank" class="evidence-link">View Source ↗</a>
+                    {% if ev.page %}<span>Page {{ ev.page }}</span>{% endif %}
+                    {% if ev.source_url %}
+                    <a href="{{ ev.source_url }}" target="_blank" rel="noopener" class="evidence-link">View source document →</a>
+                    {% endif %}
                 </div>
+                {% if ev.snippet %}
                 <blockquote class="evidence-snippet">
-                    {{ ev.snippet }}
+                    {{ ev.snippet | e }}
                 </blockquote>
+                {% endif %}
             </div>
             {% endfor %}
         </div>
     </section>
     {% endif %}
 
+    {% if case.evidence %}
     <section class="dossier-section">
-        <h2>📎 Original Sources</h2>
+        <h2>Source Documents</h2>
         <div class="sources-list">
+            {% set seen_docs = [] %}
             {% for ev in case.evidence %}
-            {% if ev.document %}
-            <a href="{{ ev.document.source_url }}" target="_blank" class="source-link">
-                📄 {{ ev.document.title }}
+            {% if ev.document and ev.document.id not in seen_docs %}
+            {% set _ = seen_docs.append(ev.document.id) %}
+            <a href="{{ ev.document.source_url or ev.source_url }}" target="_blank" rel="noopener" class="source-link">
+                <span>📄</span>
+                <span>{{ ev.document.title }}</span>
             </a>
             {% endif %}
             {% endfor %}
         </div>
     </section>
+    {% endif %}
 
     <section class="dossier-section">
-        <h2>📝 Notes</h2>
+        <h2>Your Notes</h2>
         <form class="notes-form">
-            <textarea id="note-input" placeholder="Add a note about this case..." class="note-textarea"></textarea>
+            <textarea id="note-input" placeholder="Add your notes, observations, or action items for this case..." class="note-textarea"></textarea>
             <button type="submit" class="btn btn-primary">Save Note</button>
         </form>
     </section>
+
+    <div style="text-align: center; padding: 1rem 0; color: var(--color-text-muted); font-size: 0.8125rem;">
+        Last updated: {{ case.updated_at.strftime('%d.%m.%Y at %H:%M') }}
+    </div>
 </div>
 {% endblock %}

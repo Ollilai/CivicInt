@@ -4,74 +4,99 @@
 <div class="feed-container">
     <header class="feed-header">
         <h1>Environmental Cases</h1>
-        <p class="feed-subtitle">{{ cases|length }} cases found</p>
+        <p class="feed-subtitle">Monitoring {{ cases|length }} active cases across Lapland</p>
     </header>
 
     <div class="filters-bar">
         <div class="filter-group">
             <select id="filter-category" class="filter-select">
                 <option value="">All Categories</option>
-                <option value="zoning">🏗️ Zoning & Land-use</option>
-                <option value="permits">📋 Permits & Extraction</option>
-                <option value="water">💧 Water & Wetlands</option>
-                <option value="industry">🏭 Industry & Infrastructure</option>
+                <option value="extraction">Extraction & Permits</option>
+                <option value="zoning">Zoning & Land-use</option>
+                <option value="energy">Energy & Infrastructure</option>
+                <option value="forestry">Forestry</option>
+                <option value="water">Water & Wetlands</option>
             </select>
 
             <select id="filter-confidence" class="filter-select">
                 <option value="">All Confidence</option>
-                <option value="high">🟢 High Only</option>
-                <option value="medium">🟡 Medium+</option>
+                <option value="high">High confidence</option>
+                <option value="medium">Medium+</option>
+            </select>
+
+            <select id="filter-status" class="filter-select">
+                <option value="">All Status</option>
+                <option value="proposed">Proposed</option>
+                <option value="approved">Approved</option>
+                <option value="appealed">Appealed</option>
             </select>
         </div>
 
         <div class="search-box">
-            <input type="text" id="search" placeholder="Search cases..." class="search-input">
+            <input type="text" id="search" placeholder="Search by location, permit, or keyword..." class="search-input">
         </div>
     </div>
 
     <div class="cases-grid" id="cases-grid">
         {% if cases %}
         {% for case in cases %}
-        <article class="case-card" data-category="{{ case.primary_category }}" data-confidence="{{ case.confidence }}">
-            <div class="case-header">
-                <span class="case-category category-{{ case.primary_category }}">
-                    {% if case.primary_category == 'zoning' %}🏗️{% elif case.primary_category == 'permits' %}📋{% elif
-                    case.primary_category == 'water' %}💧{% elif case.primary_category == 'industry' %}🏭{% else %}📄{%
-                    endif %}
-                    {{ case.primary_category|title }}
-                </span>
-                <span class="case-confidence confidence-{{ case.confidence }}"
-                    title="{{ case.confidence_reason or 'No details' }}">
-                    {% if case.confidence == 'high' %}🟢{% elif case.confidence == 'medium' %}🟡{% else %}🔴{% endif %}
-                    {{ case.confidence|title }}
-                </span>
+        <article class="case-card"
+                 data-category="{{ case.primary_category }}"
+                 data-confidence="{{ case.confidence }}"
+                 data-status="{{ case.status }}">
+
+            {# Deadline banner - shows at top of card if there's an upcoming deadline #}
+            {# For now we show the status as indicator - TODO: add deadline field to model #}
+            {% if case.status == 'proposed' %}
+            <div class="case-deadline-banner deadline-soon">
+                <span>Open for comment</span>
             </div>
+            {% endif %}
 
-            <h2 class="case-headline">{{ case.headline }}</h2>
+            <div class="case-card-body">
+                <div class="case-header">
+                    <span class="case-category category-{{ case.primary_category }}">
+                        {{ case.primary_category|replace('_', ' ')|title }}
+                    </span>
+                    <span class="case-confidence" title="{{ case.confidence_reason or 'No details available' }}">
+                        {% if case.confidence == 'high' %}High{% elif case.confidence == 'medium' %}Medium{% else %}Low{% endif %} confidence
+                    </span>
+                </div>
 
-            <div class="case-summary">
-                {# SECURITY: Do not use |safe on LLM-generated content - XSS risk #}
-                {{ case.summary_md | e }}
-            </div>
+                <h2 class="case-headline">{{ case.headline }}</h2>
 
-            <div class="case-meta">
-                <span class="case-status status-{{ case.status }}">{{ case.status|title }}</span>
-                <span class="case-time">{{ case.updated_at.strftime('%d.%m.%Y') }}</span>
-            </div>
+                {# Extract location from entities if available #}
+                {% if case.entities_json %}
+                <div class="case-location">
+                    <span class="case-location-icon">📍</span>
+                    <span>{{ case.municipalities_json|replace('[', '')|replace(']', '')|replace('"', '') if case.municipalities_json else 'Location pending' }}</span>
+                </div>
+                {% endif %}
 
-            <div class="case-actions">
-                <a href="/case/{{ case.id }}" class="btn btn-primary">View Dossier</a>
-                <button class="btn btn-icon btn-star" title="Star">⭐</button>
-                <button class="btn btn-icon btn-dismiss" title="Dismiss">✕</button>
+                <div class="case-summary">
+                    {# SECURITY: Do not use |safe on LLM-generated content - XSS risk #}
+                    {{ case.summary_md | e }}
+                </div>
+
+                <div class="case-meta">
+                    <span class="case-status status-{{ case.status }}">{{ case.status|title }}</span>
+                    <span class="case-time">Updated {{ case.updated_at.strftime('%d.%m.%Y') }}</span>
+                </div>
+
+                <div class="case-actions">
+                    <a href="/case/{{ case.id }}" class="btn btn-primary">View Details</a>
+                    <button class="btn btn-icon btn-star" title="Save to watchlist" aria-label="Save">☆</button>
+                    <button class="btn btn-icon btn-dismiss" title="Dismiss" aria-label="Dismiss">×</button>
+                </div>
             </div>
         </article>
         {% endfor %}
         {% else %}
         <div class="empty-state">
-            <div class="empty-icon">📭</div>
+            <div class="empty-icon">🌲</div>
             <h2>No cases yet</h2>
-            <p>Run the pipeline to discover documents and build cases.</p>
-            <code>python -m watchdog.cli run-pipeline</code>
+            <p>The watchdog is ready to monitor municipal environmental decisions.</p>
+            <code>python -m watchdog.cli run-pipeline --stage all</code>
         </div>
         {% endif %}
     </div>

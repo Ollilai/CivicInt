@@ -27,7 +27,7 @@ def get_connector(source: Source):
 
     connector_class = connector_map.get(source.platform)
     if not connector_class:
-        raise ValueError(f"Unknown platform: {source.platform}")
+        return None  # Unsupported platform, will be skipped
 
     return connector_class(
         source_id=source.id,
@@ -44,6 +44,8 @@ async def discover_from_source(source: Source) -> Tuple[int, list[DocumentRef], 
         Tuple of (source_id, document_refs, error_message or None)
     """
     connector = get_connector(source)
+    if connector is None:
+        return source.id, [], f"Unsupported platform: {source.platform}"
 
     try:
         doc_refs = await connector.discover()
@@ -151,9 +153,16 @@ def run():
 
         # Save results to database (must be done synchronously with session)
         total_new = 0
+        skipped = 0
         for source_id, (doc_refs, error) in results.items():
             source = source_map[source_id]
             print(f"  {source.municipality} ({source.platform}):", end=" ")
+
+            # Track skipped unsupported platforms
+            if error and "Unsupported platform" in error:
+                print(f"⊘ skipped (unsupported)")
+                skipped += 1
+                continue
 
             new_count = save_discovered_documents(source, doc_refs, error, session)
             if not error:
@@ -161,4 +170,4 @@ def run():
             total_new += new_count
 
         session.commit()
-        print(f"\nTotal new documents: {total_new}")
+        print(f"\nTotal new documents: {total_new}" + (f" ({skipped} sources skipped)" if skipped else ""))

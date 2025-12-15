@@ -1,8 +1,11 @@
 """Watchdog CLI for admin tasks."""
 
 import argparse
+import csv
+import os
 import sys
 from datetime import datetime
+from pathlib import Path
 
 from watchdog.config import get_settings
 from watchdog.db.models import Base, Source, get_engine, get_session_factory, init_db
@@ -13,6 +16,88 @@ def cmd_init_db(args):
     print("Initializing database...")
     init_db()
     print("✓ Database tables created successfully.")
+
+
+def detect_platform(url: str) -> str:
+    """Detect platform type from URL."""
+    if not url:
+        return "unknown"
+    url_lower = url.lower()
+    if "cloudnc.fi" in url_lower:
+        return "cloudnc"
+    elif "oncloudos.com" in url_lower:
+        return "dynasty"
+    elif "dynasty" in url_lower:
+        return "dynasty"
+    elif "tweb" in url_lower or "ktweb" in url_lower:
+        return "tweb"
+    elif ".fi" in url_lower:
+        return "web"  # Generic web scraper
+    return "unknown"
+
+
+def cmd_seed_lapland(args):
+    """Seed Lapland municipality sources from CSV."""
+    # Find the CSV file
+    project_root = Path(__file__).parent.parent
+    csv_path = project_root / "Lapland_Data_Sources - Taulukko1.csv"
+    
+    if not csv_path.exists():
+        print(f"✗ CSV file not found: {csv_path}")
+        return
+    
+    print(f"Reading sources from: {csv_path}")
+    
+    Session = get_session_factory()
+    added_count = 0
+    skipped_count = 0
+    
+    with open(csv_path, 'r', encoding='utf-8') as f:
+        reader = csv.DictReader(f)
+        
+        with Session() as session:
+            for row in reader:
+                municipality = row['Kunta'].strip()
+                
+                # Each column represents a different source type
+                source_types = [
+                    ('esityslistat', row.get('Esityslistat', '').strip()),
+                    ('poytakirjat', row.get('Pöytäkirjat', '').strip()),
+                    ('viranhaltija', row.get('Viranhaltijapäätökset', '').strip()),
+                    ('kuulutukset', row.get('Kuulutukset', '').strip()),
+                    ('kaavat', row.get('Kaavat', '').strip()),
+                ]
+                
+                for source_type, url in source_types:
+                    if not url:
+                        continue
+                    
+                    platform = detect_platform(url)
+                    
+                    # Check if source already exists
+                    existing = session.query(Source).filter_by(
+                        municipality=municipality,
+                        base_url=url
+                    ).first()
+                    
+                    if existing:
+                        skipped_count += 1
+                        continue
+                    
+                    source = Source(
+                        municipality=municipality,
+                        platform=platform,
+                        base_url=url,
+                        enabled=True,
+                        config_json={'source_type': source_type}
+                    )
+                    session.add(source)
+                    added_count += 1
+                    print(f"  + {municipality} ({source_type}): {platform}")
+                
+            session.commit()
+    
+    print(f"\n✓ Seeding complete: {added_count} added, {skipped_count} skipped (already exist)")
 
 
 def cmd_health(args):
@@ -169,6 +254,10 @@ def main():
     # health
     parser_health = subparsers.add_parser("health", help="Check connector health")
     parser_health.set_defaults(func=cmd_health)
+    
+    # seed-lapland
+    parser_seed = subparsers.add_parser("seed-lapland", help="Seed Lapland municipality sources from CSV")
+    parser_seed.set_defaults(func=cmd_seed_lapland)
     
     # add-source
     parser_add = subparsers.add_parser("add-source", help="Add a new source")

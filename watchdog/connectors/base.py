@@ -8,7 +8,7 @@ import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Tuple
 from urllib.parse import urlparse
 
 import httpx
@@ -29,6 +29,62 @@ _BLOCKED_IP_RANGES = [
 ]
 
 
+def _is_ip_blocked(ip_str: str) -> bool:
+    """Check if an IP address is in a blocked range."""
+    try:
+        ip = ipaddress.ip_address(ip_str)
+        for blocked_range in _BLOCKED_IP_RANGES:
+            if ip in blocked_range:
+                return True
+        return False
+    except ValueError:
+        return True  # Invalid IP is blocked
+
+
+def resolve_and_validate_url(url: str, allowed_domain: Optional[str] = None) -> Tuple[str, str, int]:
+    """
+    Resolve URL hostname to IP and validate against blocked ranges.
+
+    SECURITY: Returns the resolved IP so it can be used for the actual request,
+    preventing DNS rebinding attacks where a malicious DNS server returns different
+    IPs on subsequent lookups.
+
+    Args:
+        url: The URL to resolve and validate.
+        allowed_domain: If provided, only allow URLs from this domain.
+
+    Returns:
+        Tuple of (resolved_ip, hostname, port) for safe URLs.
+
+    Raises:
+        ValueError: If URL is unsafe or cannot be resolved.
+    """
+    parsed = urlparse(url)
+
+    if parsed.scheme not in ("http", "https"):
+        raise ValueError(f"SECURITY: Invalid scheme '{parsed.scheme}', only http/https allowed")
+
+    if not parsed.hostname:
+        raise ValueError("SECURITY: URL must have a hostname")
+
+    # Check domain restriction if provided
+    if allowed_domain and parsed.hostname != allowed_domain:
+        if not parsed.hostname.endswith(f".{allowed_domain}"):
+            raise ValueError(f"SECURITY: Domain {parsed.hostname} not allowed")
+
+    try:
+        resolved_ip = socket.gethostbyname(parsed.hostname)
+    except socket.gaierror as e:
+        raise ValueError(f"SECURITY: DNS resolution failed for {parsed.hostname}: {e}")
+
+    if _is_ip_blocked(resolved_ip):
+        raise ValueError(f"SECURITY: Blocked IP address {resolved_ip} for hostname {parsed.hostname}")
+
+    port = parsed.port or (443 if parsed.scheme == "https" else 80)
+
+    return resolved_ip, parsed.hostname, port
+
+
 def is_safe_url(url: str, allowed_domain: Optional[str] = None) -> bool:
     """
     Check if a URL is safe to fetch (not targeting internal resources).
@@ -46,37 +102,9 @@ def is_safe_url(url: str, allowed_domain: Optional[str] = None) -> bool:
         True if the URL is safe to fetch, False otherwise.
     """
     try:
-        parsed = urlparse(url)
-
-        # Only allow http and https
-        if parsed.scheme not in ("http", "https"):
-            return False
-
-        # Must have a hostname
-        if not parsed.hostname:
-            return False
-
-        # Check domain restriction if provided
-        if allowed_domain and parsed.hostname != allowed_domain:
-            # Allow subdomains of the allowed domain
-            if not parsed.hostname.endswith(f".{allowed_domain}"):
-                return False
-
-        # Resolve hostname to IP and check against blocked ranges
-        try:
-            ip_str = socket.gethostbyname(parsed.hostname)
-            ip = ipaddress.ip_address(ip_str)
-
-            for blocked_range in _BLOCKED_IP_RANGES:
-                if ip in blocked_range:
-                    return False
-        except socket.gaierror:
-            # DNS resolution failed - could be an attack vector
-            return False
-
+        resolve_and_validate_url(url, allowed_domain)
         return True
-
-    except Exception:
+    except ValueError:
         return False
 
 
@@ -154,20 +182,36 @@ class BaseConnector(ABC):
         return self._client
     
     async def fetch(self, url: str, retries: int = 3) -> httpx.Response:
-        """Fetch URL with rate limiting and retries."""
-        # SECURITY: Validate URL to prevent SSRF attacks
-        if not is_safe_url(url):
-            raise ValueError(f"SECURITY: Blocked unsafe URL: {url}")
+        """Fetch URL with rate limiting and retries.
+
+        SECURITY: Validates URL before request and verifies final URL after redirects
+        to prevent SSRF via DNS rebinding or open redirects.
+        """
+        # SECURITY: Validate initial URL to prevent SSRF attacks
+        resolve_and_validate_url(url)  # Raises ValueError if unsafe
 
         domain = urlparse(url).netloc
         await self.rate_limiter.acquire(domain)
 
         client = await self._get_client()
-        
+
         last_error = None
         for attempt in range(retries):
             try:
                 response = await client.get(url)
+
+                # SECURITY: Validate final URL after redirects to prevent
+                # SSRF via open redirect vulnerabilities
+                final_url = str(response.url)
+                if final_url != url:
+                    try:
+                        resolve_and_validate_url(final_url)
+                    except ValueError as e:
+                        raise ValueError(
+                            f"SECURITY: Redirect to unsafe URL blocked. "
+                            f"Original: {url}, Final: {final_url}, Reason: {e}"
+                        )
+
                 response.raise_for_status()
                 return response
             except httpx.HTTPStatusError as e:
@@ -182,7 +226,7 @@ class BaseConnector(ABC):
                 last_error = e
                 if attempt < retries - 1:
                     await asyncio.sleep(2 ** attempt)
-        
+
         raise last_error or Exception("Max retries exceeded")
     
     async def close(self) -> None:

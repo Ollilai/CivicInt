@@ -1,8 +1,12 @@
 """FastAPI application for Watchdog MVP."""
 
 import secrets
+import time
+from collections import defaultdict
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 from pathlib import Path
+from threading import Lock
 
 from fastapi import FastAPI, Request, Depends, HTTPException, Query
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -18,6 +22,69 @@ from watchdog.db.models import get_session_factory, init_db
 APP_DIR = Path(__file__).parent
 TEMPLATES_DIR = APP_DIR / "templates"
 STATIC_DIR = APP_DIR / "static"
+
+
+# ============================================================================
+# RATE LIMITING FOR AUTHENTICATION
+# ============================================================================
+
+
+class AuthRateLimiter:
+    """
+    Rate limiter for authentication attempts.
+
+    SECURITY: Prevents brute-force attacks on admin token by limiting
+    failed attempts per IP address within a time window.
+    """
+
+    def __init__(self, max_attempts: int = 5, window_seconds: int = 300):
+        self.max_attempts = max_attempts
+        self.window_seconds = window_seconds
+        self._attempts: dict[str, list[float]] = defaultdict(list)
+        self._lock = Lock()
+
+    def _cleanup_old_attempts(self, ip: str, now: float) -> None:
+        """Remove attempts older than the window."""
+        cutoff = now - self.window_seconds
+        self._attempts[ip] = [t for t in self._attempts[ip] if t > cutoff]
+
+    def is_rate_limited(self, ip: str) -> bool:
+        """Check if the IP is currently rate limited."""
+        now = time.time()
+        with self._lock:
+            self._cleanup_old_attempts(ip, now)
+            return len(self._attempts[ip]) >= self.max_attempts
+
+    def record_attempt(self, ip: str) -> None:
+        """Record a failed authentication attempt."""
+        now = time.time()
+        with self._lock:
+            self._cleanup_old_attempts(ip, now)
+            self._attempts[ip].append(now)
+
+    def get_retry_after(self, ip: str) -> int:
+        """Get seconds until rate limit expires for the IP."""
+        with self._lock:
+            if not self._attempts[ip]:
+                return 0
+            oldest = min(self._attempts[ip])
+            return max(0, int(self.window_seconds - (time.time() - oldest)))
+
+
+# Global rate limiter instance
+_auth_rate_limiter: AuthRateLimiter | None = None
+
+
+def get_auth_rate_limiter() -> AuthRateLimiter:
+    """Get or create the auth rate limiter."""
+    global _auth_rate_limiter
+    if _auth_rate_limiter is None:
+        settings = get_settings()
+        _auth_rate_limiter = AuthRateLimiter(
+            max_attempts=settings.auth_rate_limit_attempts,
+            window_seconds=settings.auth_rate_limit_window,
+        )
+    return _auth_rate_limiter
 
 
 @asynccontextmanager
@@ -62,14 +129,36 @@ def get_db():
 
 
 # Admin authentication dependency
-def verify_admin_token(token: str = Query(None, alias="token")) -> bool:
+def verify_admin_token(
+    request: Request,
+    token: str = Query(None, alias="token"),
+) -> bool:
     """
     Verify admin token for protected routes.
 
-    SECURITY: Requires ADMIN_TOKEN to be set in environment.
-    Uses constant-time comparison to prevent timing attacks.
+    SECURITY:
+    - Requires ADMIN_TOKEN to be set in environment
+    - Uses constant-time comparison to prevent timing attacks
+    - Rate limits failed attempts per IP to prevent brute-force attacks
     """
     settings = get_settings()
+    rate_limiter = get_auth_rate_limiter()
+
+    # Get client IP (handle proxy headers)
+    client_ip = request.client.host if request.client else "unknown"
+    forwarded_for = request.headers.get("X-Forwarded-For")
+    if forwarded_for:
+        # Take the first IP in the chain (original client)
+        client_ip = forwarded_for.split(",")[0].strip()
+
+    # SECURITY: Check rate limit before processing
+    if rate_limiter.is_rate_limited(client_ip):
+        retry_after = rate_limiter.get_retry_after(client_ip)
+        raise HTTPException(
+            status_code=429,
+            detail=f"Too many failed attempts. Try again in {retry_after} seconds.",
+            headers={"Retry-After": str(retry_after)},
+        )
 
     if not settings.admin_token:
         raise HTTPException(
@@ -85,6 +174,8 @@ def verify_admin_token(token: str = Query(None, alias="token")) -> bool:
 
     # Constant-time comparison to prevent timing attacks
     if not secrets.compare_digest(token, settings.admin_token):
+        # SECURITY: Record failed attempt for rate limiting
+        rate_limiter.record_attempt(client_ip)
         raise HTTPException(status_code=403, detail="Invalid admin token.")
 
     return True
@@ -152,15 +243,14 @@ async def admin_dashboard(
 ):
     """Admin dashboard. Requires admin token for access."""
     from watchdog.db.models import Source, Document, Case, LLMUsage
-    from datetime import datetime
-    
+
     # Stats
     sources = db.query(Source).all()
     doc_count = db.query(Document).count()
     case_count = db.query(Case).count()
-    
+
     # LLM spend this month
-    month_start = datetime.now().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    month_start = datetime.now(timezone.utc).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
     llm_records = db.query(LLMUsage).filter(LLMUsage.created_at >= month_start).all()
     llm_spend = sum(r.estimated_cost_eur for r in llm_records)
     

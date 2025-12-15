@@ -52,12 +52,18 @@ class Settings(BaseSettings):
     connector_rate_limit: float = 1.0  # requests per second
     connector_user_agent: str = "CivicWatchdog/1.0 (contact@example.com)"
 
-    # LLM budget
+    # LLM settings
     llm_monthly_budget: float = 10.0  # euros
+    triage_model: str = "gpt-4o-mini"
+    case_builder_model: str = "gpt-4o"
 
     # Token limits
     triage_max_tokens: int = 4000
     case_builder_max_tokens: int = 8000
+
+    # Rate limiting for authentication
+    auth_rate_limit_attempts: int = 5  # Max failed attempts
+    auth_rate_limit_window: int = 300  # Window in seconds (5 minutes)
 
 
 def validate_security_settings(settings: Settings) -> None:

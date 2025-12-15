@@ -1,8 +1,8 @@
 """Discovery pipeline stage - run connectors and find new documents."""
 
 import asyncio
-import hashlib
-from datetime import datetime
+from datetime import datetime, timezone
+from typing import Tuple
 
 from sqlalchemy.orm import Session
 
@@ -24,11 +24,11 @@ def get_connector(source: Source):
         "tweb": TWebConnector,
         "municipal_website": MunicipalWebsiteConnector,
     }
-    
+
     connector_class = connector_map.get(source.platform)
     if not connector_class:
         raise ValueError(f"Unknown platform: {source.platform}")
-    
+
     return connector_class(
         source_id=source.id,
         base_url=source.base_url,
@@ -36,25 +36,48 @@ def get_connector(source: Source):
     )
 
 
-async def process_source(source: Source, session: Session) -> int:
-    """Process a single source and return count of new documents."""
+async def discover_from_source(source: Source) -> Tuple[int, list[DocumentRef], str | None]:
+    """
+    Discover documents from a source asynchronously.
+
+    Returns:
+        Tuple of (source_id, document_refs, error_message or None)
+    """
     connector = get_connector(source)
-    new_count = 0
-    
+
     try:
         doc_refs = await connector.discover()
-        
+        return source.id, doc_refs, None
+    except Exception as e:
+        return source.id, [], str(e)
+    finally:
+        await connector.close()
+
+
+def save_discovered_documents(
+    source: Source,
+    doc_refs: list[DocumentRef],
+    error: str | None,
+    session: Session,
+) -> int:
+    """Save discovered documents to the database and return count of new documents."""
+    new_count = 0
+
+    if error:
+        source.consecutive_failures += 1
+        source.last_error = error
+        print(f"  ✗ Error: {error}")
+    else:
         for ref in doc_refs:
             # Check if document already exists
             existing = session.query(Document).filter_by(
                 source_id=source.id,
                 external_id=ref.external_id,
             ).first()
-            
+
             if existing:
-                # Check for updates via content hash later (during fetch)
                 continue
-            
+
             # Create new document
             doc = Document(
                 source_id=source.id,
@@ -69,7 +92,7 @@ async def process_source(source: Source, session: Session) -> int:
             )
             session.add(doc)
             session.flush()  # Get the ID
-            
+
             # Add file references
             for file_url in ref.file_urls:
                 file = File(
@@ -79,42 +102,63 @@ async def process_source(source: Source, session: Session) -> int:
                     text_status="pending",
                 )
                 session.add(file)
-            
+
             new_count += 1
-        
+
         # Update source health
-        source.last_success_at = datetime.utcnow()
+        source.last_success_at = datetime.now(timezone.utc)
         source.consecutive_failures = 0
         source.last_error = None
-        
-    except Exception as e:
-        source.consecutive_failures += 1
-        source.last_error = str(e)
-        print(f"Error processing {source.municipality}: {e}")
-    
-    finally:
-        await connector.close()
-    
-    session.commit()
+
     return new_count
 
 
+async def run_discovery_async(sources: list[Source]) -> dict[int, Tuple[list[DocumentRef], str | None]]:
+    """Run discovery for all sources concurrently."""
+    tasks = [discover_from_source(source) for source in sources]
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+
+    # Process results
+    result_map: dict[int, Tuple[list[DocumentRef], str | None]] = {}
+    for result in results:
+        if isinstance(result, Exception):
+            # Handle unexpected exceptions
+            continue
+        source_id, doc_refs, error = result
+        result_map[source_id] = (doc_refs, error)
+
+    return result_map
+
+
 def run():
-    """Run discovery for all enabled sources."""
+    """Run discovery for all enabled sources concurrently."""
     SessionLocal = get_session_factory()
-    
+
     with SessionLocal() as session:
         sources = session.query(Source).filter_by(enabled=True).all()
-        
+
         if not sources:
             print("No enabled sources found.")
             return
-        
+
+        # Create a mapping for quick lookup
+        source_map = {s.id: s for s in sources}
+
+        print(f"Discovering from {len(sources)} sources concurrently...")
+
+        # Run all discoveries concurrently
+        results = asyncio.run(run_discovery_async(sources))
+
+        # Save results to database (must be done synchronously with session)
         total_new = 0
-        for source in sources:
-            print(f"Discovering: {source.municipality} ({source.platform})")
-            new_count = asyncio.run(process_source(source, session))
-            print(f"  → Found {new_count} new documents")
+        for source_id, (doc_refs, error) in results.items():
+            source = source_map[source_id]
+            print(f"  {source.municipality} ({source.platform}):", end=" ")
+
+            new_count = save_discovered_documents(source, doc_refs, error, session)
+            if not error:
+                print(f"✓ {new_count} new documents")
             total_new += new_count
-        
+
+        session.commit()
         print(f"\nTotal new documents: {total_new}")

@@ -3,18 +3,25 @@ from fastapi.testclient import TestClient
 from sqlalchemy import JSON, create_engine
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
 
 from civicint.api.app import create_app
 from civicint.api.deps import get_db
 from civicint.models import Base
 
+# Register JSONB as JSON for SQLite compatibility (once at import time)
+from sqlalchemy.dialects.sqlite.base import SQLiteTypeCompiler
 
-@pytest.fixture(scope="session")
+SQLiteTypeCompiler.visit_JSONB = SQLiteTypeCompiler.visit_JSON
+
+
+@pytest.fixture
 def engine():
-    e = create_engine("sqlite:///:memory:")
-    # Register JSONB as JSON for SQLite compatibility
-    from sqlalchemy.dialects.sqlite.base import SQLiteTypeCompiler
-    SQLiteTypeCompiler.visit_JSONB = SQLiteTypeCompiler.visit_JSON
+    e = create_engine(
+        "sqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
     Base.metadata.create_all(e)
     return e
 
@@ -24,7 +31,6 @@ def db_session(engine):
     Session = sessionmaker(bind=engine)
     session = Session()
     yield session
-    session.rollback()
     session.close()
 
 

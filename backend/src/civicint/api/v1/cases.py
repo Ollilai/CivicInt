@@ -1,4 +1,3 @@
-from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
@@ -14,11 +13,11 @@ router = APIRouter(prefix="/cases", tags=["cases"])
 
 @router.get("", response_model=PaginatedResponse[CaseListItem])
 def get_cases(
-    municipality: Optional[str] = None,
-    category: Optional[str] = None,
-    status: Optional[CaseStatus] = None,
-    confidence: Optional[Confidence] = None,
-    search: Optional[str] = None,
+    municipality: str | None = None,
+    category: str | None = None,
+    status: CaseStatus | None = None,
+    confidence: Confidence | None = None,
+    search: str | None = None,
     bookmarked: bool = False,
     page: int = Query(1, ge=1),
     per_page: int = Query(20, ge=1, le=100),

@@ -21,6 +21,7 @@ dependencies = [
     "lxml>=5.2.0",
     "feedparser>=6.0.0",
     "python-slugify>=8.0.0",
+    "click>=8.1.0",
 ]
 
 [project.optional-dependencies]
@@ -49,6 +50,11 @@ src = ["src"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "W", "UP", "B"]
+ignore = [
+    "F821",  # SQLAlchemy uses forward-ref strings in Mapped[] — not actually undefined
+    "B008",  # FastAPI Depends() in default args is the standard pattern
+    "UP042", # str+enum.Enum needed for SQLAlchemy compatibility with Postgres enums
+]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

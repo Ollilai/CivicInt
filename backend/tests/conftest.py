@@ -1,16 +1,15 @@
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import JSON, create_engine
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy import create_engine
+
+# Register JSONB as JSON for SQLite compatibility (once at import time)
+from sqlalchemy.dialects.sqlite.base import SQLiteTypeCompiler
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from civicint.api.app import create_app
 from civicint.api.deps import get_db
 from civicint.models import Base
-
-# Register JSONB as JSON for SQLite compatibility (once at import time)
-from sqlalchemy.dialects.sqlite.base import SQLiteTypeCompiler
 
 SQLiteTypeCompiler.visit_JSONB = SQLiteTypeCompiler.visit_JSON
 

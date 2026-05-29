@@ -1,4 +1,3 @@
-from typing import Optional
 
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -39,9 +38,9 @@ def get_municipalities(db: Session) -> list[dict]:
     return municipalities
 
 
-def create_source(db: Session, *, municipality: str, region: Optional[str], platform: str,
+def create_source(db: Session, *, municipality: str, region: str | None, platform: str,
                   base_url: str, scrape_interval_minutes: int = 120,
-                  extra_config: Optional[dict] = None) -> Source:
+                  extra_config: dict | None = None) -> Source:
     source = Source(
         municipality=municipality,
         region=region,

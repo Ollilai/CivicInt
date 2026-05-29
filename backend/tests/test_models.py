@@ -8,7 +8,6 @@ from civicint.models import (
     FileText,
     LLMUsage,
     Source,
-    TextStatus,
     User,
 )
 

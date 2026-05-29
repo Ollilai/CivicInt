@@ -1,6 +1,5 @@
-from typing import Optional
 
-from sqlalchemy import func, or_
+from sqlalchemy import or_
 from sqlalchemy.orm import Session, joinedload
 
 from civicint.models import Bookmark, Case, CaseStatus, Confidence
@@ -9,12 +8,12 @@ from civicint.models import Bookmark, Case, CaseStatus, Confidence
 def list_cases(
     db: Session,
     *,
-    municipality: Optional[str] = None,
-    category: Optional[str] = None,
-    status: Optional[CaseStatus] = None,
-    confidence: Optional[Confidence] = None,
-    search: Optional[str] = None,
-    user_id: Optional[int] = None,
+    municipality: str | None = None,
+    category: str | None = None,
+    status: CaseStatus | None = None,
+    confidence: Confidence | None = None,
+    search: str | None = None,
+    user_id: int | None = None,
     bookmarked: bool = False,
     page: int = 1,
     per_page: int = 20,
@@ -47,7 +46,7 @@ def list_cases(
     return cases, total
 
 
-def get_case_by_slug(db: Session, slug: str) -> Optional[Case]:
+def get_case_by_slug(db: Session, slug: str) -> Case | None:
     return (
         db.query(Case)
         .options(joinedload(Case.evidence), joinedload(Case.events))
@@ -57,7 +56,7 @@ def get_case_by_slug(db: Session, slug: str) -> Optional[Case]:
 
 
 def toggle_bookmark(
-    db: Session, user_id: int, case_id: int, note: Optional[str] = None
+    db: Session, user_id: int, case_id: int, note: str | None = None
 ) -> bool:
     existing = (
         db.query(Bookmark)

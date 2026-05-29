@@ -1,4 +1,6 @@
 from civicint.models.base import Base
+from civicint.models.case import Case, CaseEvent, Evidence
+from civicint.models.document import Document
 from civicint.models.enums import (
     CaseStatus,
     Confidence,
@@ -6,12 +8,10 @@ from civicint.models.enums import (
     TextStatus,
     UserRole,
 )
-from civicint.models.source import Source
-from civicint.models.document import Document
 from civicint.models.file import File, FileText
-from civicint.models.case import Case, CaseEvent, Evidence
-from civicint.models.user import Bookmark, Organization, User, WatchProfile
 from civicint.models.llm_usage import LLMUsage
+from civicint.models.source import Source
+from civicint.models.user import Bookmark, Organization, User, WatchProfile
 
 __all__ = [
     "Base",

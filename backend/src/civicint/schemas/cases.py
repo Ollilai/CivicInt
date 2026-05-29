@@ -1,5 +1,4 @@
 from datetime import datetime
-from typing import Optional
 
 from pydantic import BaseModel
 
@@ -23,7 +22,7 @@ class CaseListItem(BaseModel):
 
 class EvidenceItem(BaseModel):
     id: int
-    page: Optional[int]
+    page: int | None
     snippet: str
     source_url: str
     created_at: datetime
@@ -34,8 +33,8 @@ class EvidenceItem(BaseModel):
 class CaseEventItem(BaseModel):
     id: int
     event_type: str
-    event_time: Optional[datetime]
-    payload: Optional[dict] = None
+    event_time: datetime | None
+    payload: dict | None = None
     created_at: datetime
 
     model_config = {"from_attributes": True}
@@ -43,13 +42,13 @@ class CaseEventItem(BaseModel):
 
 class CaseDetail(CaseListItem):
     summary_md: str
-    confidence_reason: Optional[str]
-    permit_number: Optional[str]
-    entities: Optional[dict] = None
-    locations: Optional[dict] = None
+    confidence_reason: str | None
+    permit_number: str | None
+    entities: dict | None = None
+    locations: dict | None = None
     evidence: list[EvidenceItem] = []
     events: list[CaseEventItem] = []
 
 
 class BookmarkCreate(BaseModel):
-    note: Optional[str] = None
+    note: str | None = None

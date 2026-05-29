@@ -25,12 +25,12 @@ class User(TimestampMixin, Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
-    name: Mapped[Optional[str]] = mapped_column(String(200))
-    image: Mapped[Optional[str]] = mapped_column(String(500))
+    name: Mapped[str | None] = mapped_column(String(200))
+    image: Mapped[str | None] = mapped_column(String(500))
     role: Mapped[UserRole] = mapped_column(default=UserRole.MEMBER)
-    org_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("organizations.id"))
+    org_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("organizations.id"))
 
-    last_login_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     organization: Mapped[Optional["Organization"]] = relationship(back_populates="users")
     bookmarks: Mapped[list["Bookmark"]] = relationship(back_populates="user")
@@ -42,8 +42,8 @@ class WatchProfile(TimestampMixin, Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     org_id: Mapped[int] = mapped_column(Integer, ForeignKey("organizations.id"), nullable=False)
     name: Mapped[str] = mapped_column(String(100), default="Default")
-    scope_json: Mapped[Optional[list]] = mapped_column(JSONB)
-    topics_json: Mapped[Optional[list]] = mapped_column(JSONB)
+    scope_json: Mapped[list | None] = mapped_column(JSONB)
+    topics_json: Mapped[list | None] = mapped_column(JSONB)
     min_confidence: Mapped[Confidence] = mapped_column(default=Confidence.LOW)
 
     organization: Mapped["Organization"] = relationship(back_populates="watch_profiles")
@@ -56,7 +56,7 @@ class Bookmark(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False)
     case_id: Mapped[int] = mapped_column(Integer, ForeignKey("cases.id"), nullable=False)
-    note: Mapped[Optional[str]] = mapped_column(Text)
+    note: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

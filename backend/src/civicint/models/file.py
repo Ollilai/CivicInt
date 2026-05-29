@@ -16,14 +16,14 @@ class File(Base):
 
     url: Mapped[str] = mapped_column(String(1000), nullable=False)
     file_type: Mapped[str] = mapped_column(String(20), nullable=False)
-    mime: Mapped[Optional[str]] = mapped_column(String(100))
-    bytes: Mapped[Optional[int]] = mapped_column(Integer)
-    page_count: Mapped[Optional[int]] = mapped_column(Integer)
-    sha256: Mapped[Optional[str]] = mapped_column(String(64))
-    storage_path: Mapped[Optional[str]] = mapped_column(String(500))
+    mime: Mapped[str | None] = mapped_column(String(100))
+    bytes: Mapped[int | None] = mapped_column(Integer)
+    page_count: Mapped[int | None] = mapped_column(Integer)
+    sha256: Mapped[str | None] = mapped_column(String(64))
+    storage_path: Mapped[str | None] = mapped_column(String(500))
     text_status: Mapped[TextStatus] = mapped_column(default=TextStatus.PENDING)
 
-    fetched_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    fetched_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

@@ -19,12 +19,12 @@ class Case(TimestampMixin, Base):
     summary_md: Mapped[str] = mapped_column(Text, nullable=False)
     status: Mapped[CaseStatus] = mapped_column(default=CaseStatus.UNKNOWN)
     confidence: Mapped[Confidence] = mapped_column(default=Confidence.MEDIUM)
-    confidence_reason: Mapped[Optional[str]] = mapped_column(Text)
+    confidence_reason: Mapped[str | None] = mapped_column(Text)
 
-    permit_number: Mapped[Optional[str]] = mapped_column(String(100), index=True)
-    municipalities_json: Mapped[Optional[list]] = mapped_column(JSONB)
-    entities_json: Mapped[Optional[dict]] = mapped_column(JSONB)
-    locations_json: Mapped[Optional[dict]] = mapped_column(JSONB)
+    permit_number: Mapped[str | None] = mapped_column(String(100), index=True)
+    municipalities_json: Mapped[list | None] = mapped_column(JSONB)
+    entities_json: Mapped[dict | None] = mapped_column(JSONB)
+    locations_json: Mapped[dict | None] = mapped_column(JSONB)
 
     first_seen_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
@@ -41,8 +41,8 @@ class CaseEvent(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     case_id: Mapped[int] = mapped_column(Integer, ForeignKey("cases.id"), nullable=False)
     event_type: Mapped[str] = mapped_column(String(50), nullable=False)
-    event_time: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
-    payload_json: Mapped[Optional[dict]] = mapped_column(JSONB)
+    event_time: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    payload_json: Mapped[dict | None] = mapped_column(JSONB)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
@@ -55,9 +55,9 @@ class Evidence(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     case_id: Mapped[int] = mapped_column(Integer, ForeignKey("cases.id"), nullable=False)
-    file_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("files.id"))
-    document_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("documents.id"))
-    page: Mapped[Optional[int]] = mapped_column(Integer)
+    file_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("files.id"))
+    document_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("documents.id"))
+    page: Mapped[int | None] = mapped_column(Integer)
     snippet: Mapped[str] = mapped_column(Text, nullable=False)
     source_url: Mapped[str] = mapped_column(String(1000), nullable=False)
     created_at: Mapped[datetime] = mapped_column(

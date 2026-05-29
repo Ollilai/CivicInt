@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -17,7 +17,9 @@ def get_pipeline_stats(db: Session) -> dict:
         "total_sources": db.query(Source).count(),
         "enabled_sources": db.query(Source).filter(Source.enabled.is_(True)).count(),
         "total_documents": db.query(Document).count(),
-        "documents_by_status": {s.value if hasattr(s, 'value') else str(s): c for s, c in status_counts},
+        "documents_by_status": {
+            s.value if hasattr(s, "value") else str(s): c for s, c in status_counts
+        },
         "total_cases": db.query(Case).count(),
         "total_files": db.query(File).count(),
     }
@@ -25,7 +27,7 @@ def get_pipeline_stats(db: Session) -> dict:
 
 def get_llm_spend(db: Session) -> dict:
     settings = get_settings()
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
 
     records = db.query(LLMUsage).filter(LLMUsage.created_at >= month_start).all()

@@ -6,17 +6,19 @@ import type { MunicipalityItem } from "@/lib/types";
 
 const categories = [
   { value: "", label: "Kaikki" },
-  { value: "zoning", label: "Kaavoitus" },
-  { value: "permits", label: "Luvat" },
-  { value: "water", label: "Vesistöt" },
-  { value: "industry", label: "Teollisuus" },
+  { value: "maankaytto", label: "Maankäyttö" },
+  { value: "rakentaminen", label: "Rakentaminen" },
+  { value: "luonnonvarat", label: "Luonnonvarat" },
+  { value: "vesistot", label: "Vesistöt" },
+  { value: "vaikuttaminen", label: "Vaikuttaminen" },
 ];
 
 const statuses = [
-  { value: "", label: "Kaikki" },
-  { value: "proposed", label: "Ehdotettu" },
-  { value: "approved", label: "Hyväksytty" },
-  { value: "unknown", label: "Tuntematon" },
+  { value: "", label: "Kaikki tilat" },
+  { value: "valitusaika", label: "Valitusaika" },
+  { value: "nahtavilla", label: "Nähtävillä" },
+  { value: "vireilla", label: "Vireillä" },
+  { value: "lainvoimainen", label: "Lainvoimainen" },
 ];
 
 interface FilterBarProps {

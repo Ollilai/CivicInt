@@ -37,7 +37,6 @@ export async function getCases(
   if (filters.municipality) params.set("municipality", filters.municipality);
   if (filters.category) params.set("category", filters.category);
   if (filters.status) params.set("status", filters.status);
-  if (filters.confidence) params.set("confidence", filters.confidence);
   if (filters.search) params.set("search", filters.search);
 
   const query = params.toString();

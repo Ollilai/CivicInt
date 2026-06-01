@@ -1,14 +1,13 @@
-from civicint.models import Case, CaseStatus, Confidence
+from civicint.models import Case, CaseStatus
 
 
 def _create_case(db_session, slug="test-case", headline="Test case"):
     case = Case(
         slug=slug,
-        primary_category="extraction",
+        primary_category="luonnonvarat",
         headline=headline,
         summary_md="- Test summary",
-        status=CaseStatus.PROPOSED,
-        confidence=Confidence.HIGH,
+        status=CaseStatus.VIREILLA,
         municipalities_json=["Rovaniemi"],
     )
     db_session.add(case)

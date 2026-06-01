@@ -405,6 +405,62 @@ def run_pipeline():
 
 
 @main.command()
+@click.option("--confirm", is_flag=True, help="Skip confirmation prompt.")
+def retriage(confirm):
+    """Delete all cases and reset documents to EXTRACTED for re-triage.
+
+    Use after changing triage/case-builder prompts to reprocess everything
+    with the new logic. Downloaded files and extracted text are preserved.
+    """
+    from civicint.models import Case, CaseEvent, Document, DocumentStatus, Evidence, LLMUsage
+
+    if not confirm:
+        click.confirm(
+            "This will delete ALL cases and reset documents for re-triage. Continue?",
+            abort=True,
+        )
+
+    factory = _make_session()
+    with factory() as session:
+        ev_count = session.query(Evidence).delete()
+        ce_count = session.query(CaseEvent).delete()
+        case_count = session.query(Case).delete()
+
+        llm_count = (
+            session.query(LLMUsage)
+            .filter(LLMUsage.stage.in_(["triage", "case_builder"]))
+            .delete(synchronize_session="fetch")
+        )
+
+        reset_count = (
+            session.query(Document)
+            .filter(Document.status.in_([
+                DocumentStatus.TRIAGED,
+                DocumentStatus.BUILT,
+                DocumentStatus.BUDGET_PAUSED,
+            ]))
+            .update(
+                {
+                    Document.status: DocumentStatus.EXTRACTED,
+                    Document.triage_score: None,
+                    Document.triage_categories: None,
+                    Document.triage_reason: None,
+                },
+                synchronize_session="fetch",
+            )
+        )
+
+        session.commit()
+
+    click.echo(
+        f"Reset {reset_count} documents to EXTRACTED.\n"
+        f"Deleted {case_count} cases, {ev_count} evidence, "
+        f"{ce_count} events, {llm_count} LLM usage records."
+    )
+    click.echo("Run 'civicint run-pipeline' to re-triage with new prompts.")
+
+
+@main.command()
 def stats():
     """Show pipeline statistics and LLM spend."""
     from civicint.services.pipeline_service import get_llm_spend, get_pipeline_stats

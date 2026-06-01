@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 
 from openai import OpenAI
 from slugify import slugify
@@ -15,7 +15,6 @@ from civicint.models import (
     Case,
     CaseEvent,
     CaseStatus,
-    Confidence,
     Document,
     DocumentStatus,
     Evidence,
@@ -148,6 +147,17 @@ def run_case_builder(document_id: int, session: Session) -> int | None:
     session.add(usage)
 
     result = json.loads(response.choices[0].message.content)
+
+    if result.get("skip"):
+        logger.info(
+            "Document %d skipped by case builder: %s",
+            document_id,
+            result.get("skip_reason", "no actionable content"),
+        )
+        doc.status = DocumentStatus.BUILT
+        session.commit()
+        return None
+
     entities = result.get("entities", {})
 
     # Try to find an existing case by permit number
@@ -180,13 +190,18 @@ def run_case_builder(document_id: int, session: Session) -> int | None:
         return existing_case.id
 
     # Create new case
-    confidence_str = result.get("confidence", "medium")
-    if confidence_str not in ("high", "medium", "low"):
-        confidence_str = "medium"
+    status_str = result.get("status", "vireilla")
+    valid_statuses = ("valitusaika", "nahtavilla", "vireilla", "lainvoimainen")
+    if status_str not in valid_statuses:
+        status_str = "vireilla"
 
-    status_str = result.get("status", "unknown")
-    if status_str not in ("proposed", "approved", "unknown"):
-        status_str = "unknown"
+    deadline_str = result.get("action_deadline")
+    action_deadline = None
+    if deadline_str:
+        try:
+            action_deadline = date.fromisoformat(deadline_str)
+        except (ValueError, TypeError):
+            pass
 
     headline = result.get("headline", doc.title)[:300]
     base_slug = slugify(headline, max_length=190)
@@ -198,8 +213,8 @@ def run_case_builder(document_id: int, session: Session) -> int | None:
         headline=headline,
         summary_md="\n".join(f"- {point}" for point in result.get("debrief", [])),
         status=CaseStatus(status_str),
-        confidence=Confidence(confidence_str),
-        confidence_reason=result.get("confidence_reason"),
+        meeting_date=doc.meeting_date,
+        action_deadline=action_deadline,
         permit_number=entities.get("permit_number"),
         municipalities_json=[doc.source.municipality],
         entities_json=entities,

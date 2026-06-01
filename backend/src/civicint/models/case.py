@@ -1,7 +1,7 @@
-from datetime import datetime
+from datetime import date, datetime
 from typing import Optional
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, func
+from sqlalchemy import Date, DateTime, ForeignKey, Integer, String, Text, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -17,9 +17,12 @@ class Case(TimestampMixin, Base):
     primary_category: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
     headline: Mapped[str] = mapped_column(String(300), nullable=False)
     summary_md: Mapped[str] = mapped_column(Text, nullable=False)
-    status: Mapped[CaseStatus] = mapped_column(default=CaseStatus.UNKNOWN)
+    status: Mapped[CaseStatus] = mapped_column(default=CaseStatus.VIREILLA)
     confidence: Mapped[Confidence] = mapped_column(default=Confidence.MEDIUM)
     confidence_reason: Mapped[str | None] = mapped_column(Text)
+
+    meeting_date: Mapped[date | None] = mapped_column(Date)
+    action_deadline: Mapped[date | None] = mapped_column(Date)
 
     permit_number: Mapped[str | None] = mapped_column(String(100), index=True)
     municipalities_json: Mapped[list | None] = mapped_column(JSONB)

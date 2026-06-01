@@ -14,7 +14,7 @@ class TestPrompts:
         assert len(TRIAGE_PROMPT) > 100
 
     def test_triage_prompt_mentions_categories(self):
-        for cat in ("zoning", "permits", "water", "industry"):
+        for cat in ("maankaytto", "rakentaminen", "luonnonvarat", "vesistot", "vaikuttaminen"):
             assert cat in TRIAGE_PROMPT
 
     def test_case_builder_prompt_is_nonempty_string(self):
@@ -22,7 +22,7 @@ class TestPrompts:
         assert len(CASE_BUILDER_PROMPT) > 100
 
     def test_case_builder_prompt_mentions_required_fields(self):
-        for field in ("headline", "debrief", "status", "timeline", "evidence", "confidence"):
+        for field in ("headline", "debrief", "status", "timeline", "evidence", "action_deadline"):
             assert field in CASE_BUILDER_PROMPT
 
 

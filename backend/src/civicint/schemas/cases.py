@@ -1,8 +1,8 @@
-from datetime import datetime
+from datetime import date, datetime
 
 from pydantic import BaseModel
 
-from civicint.models.enums import CaseStatus, Confidence
+from civicint.models.enums import CaseStatus
 
 
 class CaseListItem(BaseModel):
@@ -11,11 +11,11 @@ class CaseListItem(BaseModel):
     headline: str
     primary_category: str
     status: CaseStatus
-    confidence: Confidence
     municipalities: list[str]
+    meeting_date: date | None
+    action_deadline: date | None
     first_seen_at: datetime
     updated_at: datetime
-    is_bookmarked: bool = False
 
     model_config = {"from_attributes": True}
 
@@ -42,7 +42,6 @@ class CaseEventItem(BaseModel):
 
 class CaseDetail(CaseListItem):
     summary_md: str
-    confidence_reason: str | None
     permit_number: str | None
     entities: dict | None = None
     locations: dict | None = None

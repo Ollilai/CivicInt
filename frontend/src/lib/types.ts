@@ -5,10 +5,10 @@ export interface CaseListItem {
   slug: string;
   primary_category: string;
   headline: string;
-  summary_md: string;
-  status: string; // "proposed" | "approved" | "unknown"
-  confidence: string; // "high" | "medium" | "low"
-  municipalities_json: string[] | null;
+  status: string; // "valitusaika" | "nahtavilla" | "vireilla" | "lainvoimainen"
+  municipalities: string[] | null;
+  meeting_date: string | null;
+  action_deadline: string | null;
   first_seen_at: string;
   updated_at: string;
 }
@@ -25,17 +25,17 @@ export interface CaseEventItem {
   id: number;
   event_type: string;
   event_time: string | null;
-  payload_json: Record<string, unknown> | null;
+  payload: Record<string, unknown> | null;
   created_at: string;
 }
 
 export interface CaseDetail extends CaseListItem {
+  summary_md: string;
   evidence: EvidenceItem[];
   events: CaseEventItem[];
-  entities_json: Record<string, unknown> | null;
-  locations_json: Record<string, unknown> | null;
+  entities: Record<string, unknown> | null;
+  locations: Record<string, unknown> | null;
   permit_number: string | null;
-  confidence_reason: string | null;
 }
 
 export interface MunicipalityItem {
@@ -87,6 +87,5 @@ export interface CaseFilters {
   municipality?: string;
   category?: string;
   status?: string;
-  confidence?: string;
   search?: string;
 }

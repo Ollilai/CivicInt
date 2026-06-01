@@ -26,48 +26,56 @@ function formatDateTime(dateStr: string): string {
 }
 
 const categoryLabels: Record<string, string> = {
-  zoning: "Kaavoitus",
-  permits: "Luvat",
-  water: "Vesistöt",
-  industry: "Teollisuus",
+  maankaytto: "Maankäyttö",
+  rakentaminen: "Rakentaminen",
+  luonnonvarat: "Luonnonvarat",
+  vesistot: "Vesistöt",
+  vaikuttaminen: "Vaikuttaminen",
 };
 
 const categoryColors: Record<string, string> = {
-  zoning: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300",
-  permits: "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300",
-  water: "bg-cyan-100 text-cyan-800 dark:bg-cyan-900/30 dark:text-cyan-300",
-  industry: "bg-slate-100 text-slate-800 dark:bg-slate-900/30 dark:text-slate-300",
+  maankaytto: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300",
+  rakentaminen: "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300",
+  luonnonvarat: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300",
+  vesistot: "bg-cyan-100 text-cyan-800 dark:bg-cyan-900/30 dark:text-cyan-300",
+  vaikuttaminen: "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300",
 };
 
-const statusLabels: Record<string, string> = {
-  proposed: "Ehdotettu",
-  approved: "Hyväksytty",
-  unknown: "Tuntematon",
+const statusConfig: Record<string, { label: string; description: string; color: string }> = {
+  valitusaika: {
+    label: "Valitusaika käynnissä",
+    description: "Päätöksestä voi valittaa",
+    color: "bg-red-50 border-red-200 text-red-800 dark:bg-red-900/20 dark:border-red-900/50 dark:text-red-300",
+  },
+  nahtavilla: {
+    label: "Nähtävillä",
+    description: "Lausuntoja ja mielipiteitä voi jättää",
+    color: "bg-orange-50 border-orange-200 text-orange-800 dark:bg-orange-900/20 dark:border-orange-900/50 dark:text-orange-300",
+  },
+  vireilla: {
+    label: "Vireillä",
+    description: "Asia on valmisteltavana, ei vielä päätetty",
+    color: "bg-blue-50 border-blue-200 text-blue-800 dark:bg-blue-900/20 dark:border-blue-900/50 dark:text-blue-300",
+  },
+  lainvoimainen: {
+    label: "Lainvoimainen",
+    description: "Päätös on lopullinen",
+    color: "bg-gray-50 border-gray-200 text-gray-600 dark:bg-gray-800/30 dark:border-gray-700 dark:text-gray-400",
+  },
 };
 
-const confidenceLabels: Record<string, string> = {
-  high: "Korkea",
-  medium: "Keskitaso",
-  low: "Matala",
-};
-
-const confidenceColors: Record<string, string> = {
-  high: "text-green-600 dark:text-green-400",
-  medium: "text-yellow-600 dark:text-yellow-400",
-  low: "text-red-600 dark:text-red-400",
-};
-
-const eventTypeLabels: Record<string, string> = {
-  decision: "Päätös",
-  hearing: "Kuuleminen",
-  application: "Hakemus",
-  comment: "Lausunto",
-  appeal: "Valitus",
-  notification: "Ilmoitus",
+const entityLabels: Record<string, string> = {
+  applicant: "Hakija/toimija",
+  permit_number: "Lupanumero",
+  project_name: "Hankkeen nimi",
+  location: "Sijainti",
+  area_hectares: "Pinta-ala (ha)",
+  developer: "Kehittäjä",
+  contractor: "Urakoitsija",
+  consultant: "Konsultti",
 };
 
 function renderMarkdown(md: string): string {
-  // Simple markdown rendering: bold, italic, headers, line breaks
   return md
     .replace(/^### (.*$)/gm, '<h3 class="text-base font-semibold mt-4 mb-1">$1</h3>')
     .replace(/^## (.*$)/gm, '<h2 class="text-lg font-semibold mt-4 mb-2">$1</h2>')
@@ -77,6 +85,20 @@ function renderMarkdown(md: string): string {
     .replace(/^- (.*$)/gm, '<li class="ml-4 list-disc">$1</li>')
     .replace(/\n\n/g, "</p><p>")
     .replace(/\n/g, "<br />");
+}
+
+function getDeadlineInfo(deadline: string): { text: string; urgent: boolean } {
+  const now = new Date();
+  now.setHours(0, 0, 0, 0);
+  const dl = new Date(deadline);
+  dl.setHours(0, 0, 0, 0);
+  const days = Math.ceil((dl.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+
+  if (days < 0) return { text: `Määräaika umpeutui ${formatDate(deadline)}`, urgent: false };
+  if (days === 0) return { text: "Määräaika tänään!", urgent: true };
+  if (days === 1) return { text: "Määräaika huomenna", urgent: true };
+  if (days <= 7) return { text: `${days} päivää jäljellä (${formatDate(deadline)})`, urgent: true };
+  return { text: `${days} päivää jäljellä (${formatDate(deadline)})`, urgent: false };
 }
 
 export default function CaseDetailPage({
@@ -142,9 +164,13 @@ export default function CaseDetailPage({
   }
 
   const catColor =
-    categoryColors[caseData.primary_category] || categoryColors.industry;
+    categoryColors[caseData.primary_category] || "bg-slate-100 text-slate-800";
   const catLabel =
     categoryLabels[caseData.primary_category] || caseData.primary_category;
+  const status = statusConfig[caseData.status] || statusConfig.vireilla;
+  const deadline = caseData.action_deadline
+    ? getDeadlineInfo(caseData.action_deadline)
+    : null;
 
   return (
     <div className="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8 py-8">
@@ -159,18 +185,40 @@ export default function CaseDetailPage({
         Takaisin
       </Link>
 
+      {/* Action banner */}
+      <div className={`rounded-lg border p-4 mb-6 ${status.color}`}>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="font-semibold text-sm">{status.label}</p>
+            <p className="text-sm opacity-80">{status.description}</p>
+          </div>
+          {deadline && (
+            <span
+              className={`text-sm font-semibold shrink-0 ${
+                deadline.urgent ? "" : "opacity-80"
+              }`}
+            >
+              {deadline.text}
+            </span>
+          )}
+        </div>
+      </div>
+
       {/* Header */}
       <div className="mb-8">
         <div className="flex flex-wrap items-center gap-2 mb-3">
           <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${catColor}`}>
             {catLabel}
           </span>
-          <span className="rounded-full bg-gray-100 dark:bg-gray-800 px-2.5 py-0.5 text-xs font-medium text-gray-700 dark:text-gray-300">
-            {statusLabels[caseData.status] || caseData.status}
-          </span>
-          <span className={`text-xs font-medium ${confidenceColors[caseData.confidence] || ""}`}>
-            Luottamus: {confidenceLabels[caseData.confidence] || caseData.confidence}
-          </span>
+          {caseData.municipalities && caseData.municipalities.length > 0 &&
+            caseData.municipalities.map((m) => (
+              <span
+                key={m}
+                className="rounded-full bg-primary-lighter px-2.5 py-0.5 text-primary text-xs font-medium"
+              >
+                {m}
+              </span>
+            ))}
         </div>
 
         <h1 className="text-2xl font-bold text-foreground mb-2">
@@ -178,19 +226,9 @@ export default function CaseDetailPage({
         </h1>
 
         <div className="flex flex-wrap items-center gap-3 text-sm text-muted">
-          {caseData.municipalities_json && caseData.municipalities_json.length > 0 && (
-            <div className="flex gap-1">
-              {caseData.municipalities_json.map((m) => (
-                <span
-                  key={m}
-                  className="rounded bg-primary-lighter px-1.5 py-0.5 text-primary text-xs font-medium"
-                >
-                  {m}
-                </span>
-              ))}
-            </div>
+          {caseData.meeting_date && (
+            <span>Kokouspäivä: {formatDate(caseData.meeting_date)}</span>
           )}
-          <span>Havaittu: {formatDate(caseData.first_seen_at)}</span>
           {caseData.permit_number && (
             <span>Lupanumero: {caseData.permit_number}</span>
           )}
@@ -208,31 +246,19 @@ export default function CaseDetailPage({
         />
       </section>
 
-      {/* Confidence reason */}
-      {caseData.confidence_reason && (
-        <section className="mb-8">
-          <h2 className="text-lg font-semibold text-foreground mb-3">
-            Luottamuksen perustelu
-          </h2>
-          <p className="text-sm text-muted bg-surface rounded-lg border border-border p-4">
-            {caseData.confidence_reason}
-          </p>
-        </section>
-      )}
-
       {/* Entities */}
-      {caseData.entities_json &&
-        Object.keys(caseData.entities_json).length > 0 && (
+      {caseData.entities &&
+        Object.keys(caseData.entities).length > 0 && (
           <section className="mb-8">
             <h2 className="text-lg font-semibold text-foreground mb-3">
-              Osapuolet
+              Osapuolet ja tiedot
             </h2>
             <div className="bg-surface rounded-lg border border-border p-5">
               <dl className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {Object.entries(caseData.entities_json).map(([key, value]) => (
+                {Object.entries(caseData.entities).map(([key, value]) => (
                   <div key={key}>
                     <dt className="text-xs font-medium text-muted uppercase tracking-wide">
-                      {key}
+                      {entityLabels[key] || key.replace(/_/g, " ")}
                     </dt>
                     <dd className="text-sm text-foreground mt-0.5">
                       {Array.isArray(value) ? value.join(", ") : String(value)}
@@ -259,18 +285,17 @@ export default function CaseDetailPage({
                 <div className="mt-1 h-2 w-2 rounded-full bg-primary shrink-0" />
                 <div className="flex-1">
                   <div className="flex items-center gap-2 mb-1">
-                    <span className="text-sm font-medium text-foreground">
-                      {eventTypeLabels[event.event_type] || event.event_type}
-                    </span>
                     {event.event_time && (
-                      <span className="text-xs text-muted">
-                        {formatDateTime(event.event_time)}
+                      <span className="text-sm font-medium text-foreground">
+                        {formatDate(event.event_time)}
                       </span>
                     )}
                   </div>
-                  {event.payload_json && (
+                  {event.payload && (
                     <p className="text-sm text-muted">
-                      {JSON.stringify(event.payload_json)}
+                      {typeof event.payload === "object" && "description" in event.payload
+                        ? String(event.payload.description)
+                        : JSON.stringify(event.payload)}
                     </p>
                   )}
                 </div>
@@ -284,7 +309,7 @@ export default function CaseDetailPage({
       {caseData.evidence.length > 0 && (
         <section className="mb-8">
           <h2 className="text-lg font-semibold text-foreground mb-3">
-            Lähteet ja todisteet
+            Lähteet
           </h2>
           <div className="space-y-3">
             {caseData.evidence.map((ev) => (
@@ -304,31 +329,13 @@ export default function CaseDetailPage({
                   >
                     {ev.source_url}
                   </a>
-                  <div className="flex gap-3">
-                    {ev.page && <span>Sivu {ev.page}</span>}
-                    <span>{formatDateTime(ev.created_at)}</span>
-                  </div>
+                  {ev.page && <span>Sivu {ev.page}</span>}
                 </div>
               </div>
             ))}
           </div>
         </section>
       )}
-
-      {/* Locations */}
-      {caseData.locations_json &&
-        Object.keys(caseData.locations_json).length > 0 && (
-          <section className="mb-8">
-            <h2 className="text-lg font-semibold text-foreground mb-3">
-              Sijainnit
-            </h2>
-            <div className="bg-surface rounded-lg border border-border p-5">
-              <pre className="text-sm text-foreground/80 whitespace-pre-wrap">
-                {JSON.stringify(caseData.locations_json, null, 2)}
-              </pre>
-            </div>
-          </section>
-        )}
     </div>
   );
 }

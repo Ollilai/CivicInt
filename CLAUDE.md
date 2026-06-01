@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What This Is
 
-CivicInt is a Finnish municipal decision document watchdog. It scrapes municipal document platforms (CloudNC, Dynasty, TWeb), extracts text from PDFs, uses LLM triage to identify environmentally relevant decisions, and builds structured cases for advocacy professionals.
+CivicInt is a Finnish municipal decision document watchdog. It scrapes municipal document platforms (CloudNC, Dynasty, TWeb), extracts text from PDFs, uses LLM triage to identify decisions with real environmental impact, and builds structured cases for advocacy professionals. Triage is impact-focused: it looks for decisions that change land use, involve construction at scale, affect natural resources/water, or reveal developer influence — not just decisions that mention environmental keywords.
 
 Monorepo: `backend/` (Python/FastAPI) + `frontend/` (Next.js). The old prototype in `watchdog/` is reference code only.
 
@@ -31,6 +31,7 @@ uv pip install -e ".[dev]" --python .venv/bin/python
 .venv/bin/civicint seed-lapland
 .venv/bin/civicint discover
 .venv/bin/civicint run-pipeline
+.venv/bin/civicint retriage       # reset all cases, re-run triage+case builder
 .venv/bin/civicint stats
 
 # Migrations
@@ -78,8 +79,8 @@ Each stage is a function in `backend/src/civicint/pipeline/` taking `(document_i
 - **discover**: Connector.discover() → creates Document + File records, deduplicates by `(source_id, external_id)`
 - **fetch**: Downloads PDFs via httpx, stores to disk, computes SHA-256
 - **extract**: pdfplumber for text; OCR fallback (Tesseract) if <100 chars from file >10KB
-- **triage**: GPT-4o-mini classifies environmental relevance (truncated to 12k chars). Records LLMUsage
-- **case_builder**: GPT-4o synthesizes cases (truncated to 24k chars). Only runs if triage_score >= 0.6. Deduplicates cases by permit_number. Records LLMUsage
+- **triage**: GPT-4o-mini classifies environmental impact (truncated to 12k chars). Impact-focused: scores based on real-world effect on environment, not keyword matches. Categories: maankaytto, rakentaminen, luonnonvarat, vesistot, vaikuttaminen. Records LLMUsage
+- **case_builder**: GPT-4o synthesizes cases (truncated to 24k chars). Only runs if triage_score >= 0.6. Can return `skip: true` if document lacks concrete actionable content. Deduplicates cases by permit_number. Records LLMUsage
 
 ### Connector Registry
 Platform name → connector class via `CONNECTOR_REGISTRY` in `connectors/__init__.py`:
@@ -98,7 +99,9 @@ All connectors inherit `BaseConnector` which provides httpx client, retry with e
 Core: `Source → Document → File/FileText → Case → Evidence + CaseEvent`
 Supporting: `Organization, User, WatchProfile, Bookmark, LLMUsage`
 
-Key enums in `models/enums.py`: `DocumentStatus`, `TextStatus`, `CaseStatus`, `Confidence`, `UserRole`.
+Key enums in `models/enums.py`: `DocumentStatus`, `TextStatus`, `CaseStatus` (valitusaika/nahtavilla/vireilla/lainvoimainen), `Confidence`, `UserRole`.
+
+Case model has `meeting_date` (from source document) and `action_deadline` (extracted by LLM — when appeal/comment period ends). Cases sort by urgency (valitusaika first) then deadline.
 
 ### API
 FastAPI factory pattern (`create_app()`) with routers:
@@ -111,8 +114,8 @@ Pydantic response schemas in `api/schemas/` match frontend TypeScript types manu
 
 ### Frontend
 Next.js 15+ App Router with React 19, Tailwind CSS 4, Auth.js v5 (optional magic link):
-- `/` — case feed with FilterBar (municipality, category, status, confidence, search)
-- `/cases/[slug]` — case detail with evidence + timeline
+- `/` — case feed with FilterBar (municipality, category, status, search). Cards show urgency status, deadline countdown, meeting date
+- `/cases/[slug]` — case detail with action banner (status + deadline), evidence + timeline
 - `/municipalities` — municipality grid
 - `/admin` — pipeline stats + LLM spend
 
@@ -127,7 +130,7 @@ API client in `lib/api.ts` fetches from `NEXT_PUBLIC_API_URL` (default `http://l
 - Tests use SQLite in-memory (JSONB→JSON shim in conftest.py)
 - Pipeline functions take a SQLAlchemy `Session` parameter; caller manages commit/rollback
 - Connectors are async (httpx); pipeline stages are sync (SQLAlchemy sessions)
-- LLM output is Finnish; triage prompts are English
+- LLM prompts and output are Finnish
 - Frontend text is Finnish; code/variable names are English
 
 ## Environment Variables

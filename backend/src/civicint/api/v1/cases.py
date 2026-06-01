@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from civicint.api.deps import get_current_user, get_db
-from civicint.models.enums import CaseStatus, Confidence
+from civicint.models.enums import CaseStatus
 from civicint.schemas.cases import CaseDetail, CaseEventItem, CaseListItem, EvidenceItem
 from civicint.schemas.common import PaginatedResponse
 from civicint.services.case_service import get_case_by_slug, list_cases
@@ -16,7 +16,6 @@ def get_cases(
     municipality: str | None = None,
     category: str | None = None,
     status: CaseStatus | None = None,
-    confidence: Confidence | None = None,
     search: str | None = None,
     bookmarked: bool = False,
     page: int = Query(1, ge=1),
@@ -30,7 +29,6 @@ def get_cases(
         municipality=municipality,
         category=category,
         status=status,
-        confidence=confidence,
         search=search,
         user_id=user_id,
         bookmarked=bookmarked,
@@ -49,11 +47,11 @@ def get_cases(
                 headline=case.headline,
                 primary_category=case.primary_category,
                 status=case.status,
-                confidence=case.confidence,
                 municipalities=municipalities,
+                meeting_date=case.meeting_date,
+                action_deadline=case.action_deadline,
                 first_seen_at=case.first_seen_at,
                 updated_at=case.updated_at,
-                is_bookmarked=False,
             )
         )
 
@@ -74,12 +72,12 @@ def get_case(slug: str, db: Session = Depends(get_db), user=Depends(get_current_
         headline=case.headline,
         primary_category=case.primary_category,
         status=case.status,
-        confidence=case.confidence,
         municipalities=case.municipalities_json or [],
+        meeting_date=case.meeting_date,
+        action_deadline=case.action_deadline,
         first_seen_at=case.first_seen_at,
         updated_at=case.updated_at,
         summary_md=case.summary_md,
-        confidence_reason=case.confidence_reason,
         permit_number=case.permit_number,
         entities=case.entities_json,
         locations=case.locations_json,

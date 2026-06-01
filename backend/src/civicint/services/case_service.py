@@ -1,8 +1,8 @@
 
-from sqlalchemy import or_
+from sqlalchemy import case, or_
 from sqlalchemy.orm import Session, joinedload
 
-from civicint.models import Bookmark, Case, CaseStatus, Confidence
+from civicint.models import Bookmark, Case, CaseStatus
 
 
 def list_cases(
@@ -11,7 +11,6 @@ def list_cases(
     municipality: str | None = None,
     category: str | None = None,
     status: CaseStatus | None = None,
-    confidence: Confidence | None = None,
     search: str | None = None,
     user_id: int | None = None,
     bookmarked: bool = False,
@@ -26,8 +25,6 @@ def list_cases(
         query = query.filter(Case.primary_category == category)
     if status:
         query = query.filter(Case.status == status)
-    if confidence:
-        query = query.filter(Case.confidence == confidence)
     if search:
         pattern = f"%{search}%"
         query = query.filter(
@@ -37,8 +34,15 @@ def list_cases(
         query = query.join(Bookmark).filter(Bookmark.user_id == user_id)
 
     total = query.count()
+
+    urgency = case(
+        (Case.status == CaseStatus.VALITUSAIKA, 0),
+        (Case.status == CaseStatus.NAHTAVILLA, 1),
+        (Case.status == CaseStatus.VIREILLA, 2),
+        else_=3,
+    )
     cases = (
-        query.order_by(Case.updated_at.desc())
+        query.order_by(urgency, Case.action_deadline.asc().nullslast(), Case.updated_at.desc())
         .offset((page - 1) * per_page)
         .limit(per_page)
         .all()

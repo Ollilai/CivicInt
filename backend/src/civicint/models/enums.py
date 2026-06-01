@@ -19,9 +19,10 @@ class TextStatus(str, enum.Enum):
 
 
 class CaseStatus(str, enum.Enum):
-    PROPOSED = "proposed"
-    APPROVED = "approved"
-    UNKNOWN = "unknown"
+    VALITUSAIKA = "valitusaika"
+    NAHTAVILLA = "nahtavilla"
+    VIREILLA = "vireilla"
+    LAINVOIMAINEN = "lainvoimainen"
 
 
 class Confidence(str, enum.Enum):

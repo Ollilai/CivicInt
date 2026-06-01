@@ -35,7 +35,8 @@ const statusColors: Record<string, string> = {
     "bg-gray-100 text-gray-700 dark:bg-gray-900/30 dark:text-gray-300",
 };
 
-function getSummaryPreview(md: string): string {
+function getSummaryPreview(md: string | undefined): string {
+  if (!md) return "";
   const lines = md.split("\n").filter((l) => l.trim());
   return lines.slice(0, 2).join(" ").slice(0, 160) + (md.length > 160 ? "..." : "");
 }
